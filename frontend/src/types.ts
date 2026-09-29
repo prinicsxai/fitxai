@@ -41,6 +41,9 @@ export interface EmployeeItem {
 export interface AttendanceRecordItem {
   id: string;
   type: 'CHECK_IN' | 'CHECK_OUT';
+  tipo?: string;
+  fecha?: string;
+  hora?: string;
   timestamp: string;
   status: string;
   notes?: string;
@@ -51,11 +54,15 @@ export interface AttendanceRecordItem {
   employee_code?: string;
   department?: string;
   job_title?: string;
+  company_id?: string;
   company_name: string;
   location_id?: string;
   latitude?: number;
   longitude?: number;
   accuracy?: number;
+  ip_origen?: string;
+  dispositivo?: string;
+  creado_en?: string;
   location_captured_at?: string;
 }
 

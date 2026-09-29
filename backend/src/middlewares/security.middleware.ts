@@ -45,6 +45,7 @@ export const corsMiddleware = cors({
 export const globalRateLimiter = rateLimit({
   windowMs: config.rateLimitWindowMs,
   max: config.rateLimitMax,
+  skip: () => config.env === 'test' || process.env.NODE_ENV === 'test',
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -59,6 +60,7 @@ export const globalRateLimiter = rateLimit({
 export const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 15, // 15 intentos por IP
+  skip: () => config.env === 'test' || process.env.NODE_ENV === 'test',
   message: {
     success: false,
     error: 'Too many login attempts. Please wait 15 minutes before trying again.',

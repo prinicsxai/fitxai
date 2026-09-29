@@ -20,6 +20,7 @@ import {
   registerPunch, 
   getMyAttendanceStatus, 
   getMyAttendanceHistory, 
+  getAttendanceById,
   createWorkerIncident, 
   getMyIncidents 
 } from '../controllers/attendance.controller';
@@ -75,6 +76,7 @@ apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), del
 apiRouter.post('/attendance/punch', requireAuth, registerPunch);
 apiRouter.get('/attendance/my-status', requireAuth, getMyAttendanceStatus);
 apiRouter.get('/attendance/my-punches', requireAuth, getMyAttendanceHistory);
+apiRouter.get('/attendance/:id', requireAuth, getAttendanceById);
 apiRouter.post('/incidents', requireAuth, createWorkerIncident);
 apiRouter.get('/incidents/my-incidents', requireAuth, getMyIncidents);
 

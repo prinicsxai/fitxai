@@ -16,9 +16,15 @@ export async function getAdminAttendance(req: Request, res: Response) {
     const date = req.query.date as string | undefined;
     const department = req.query.department as string | undefined;
     const search = req.query.search as string | undefined;
+    const targetCompanyId = (req.query.companyId as string) || user.companyId;
+
+    // Aislamiento multi-tenant: administrador solo puede consultar su propia empresa
+    const companyIdToUse = (user.role === 'ADMIN' && req.query.companyId && req.query.companyId === user.companyId)
+      ? targetCompanyId
+      : user.companyId;
 
     const conditions: string[] = ['ar.company_id = $1'];
-    const params: any[] = [user.companyId];
+    const params: any[] = [companyIdToUse];
     let paramIndex = 2;
 
     if (employeeId) {
@@ -27,9 +33,10 @@ export async function getAdminAttendance(req: Request, res: Response) {
       paramIndex++;
     }
 
-    if (type && (type === 'CHECK_IN' || type === 'CHECK_OUT')) {
+    if (type && (type === 'CHECK_IN' || type === 'CHECK_OUT' || type === 'ENTRADA' || type === 'SALIDA')) {
+      const normalizedType = (type === 'ENTRADA' || type === 'CHECK_IN') ? 'CHECK_IN' : 'CHECK_OUT';
       conditions.push(`ar.type = $${paramIndex}`);
-      params.push(type);
+      params.push(normalizedType);
       paramIndex++;
     }
 
@@ -63,6 +70,8 @@ export async function getAdminAttendance(req: Request, res: Response) {
         ar.id,
         ar.type,
         ar.timestamp,
+        to_char(ar.timestamp, 'YYYY-MM-DD') as fecha,
+        to_char(ar.timestamp, 'HH24:MI:SS') as hora,
         ar.status,
         ar.notes,
         e.id as employee_id,
@@ -72,11 +81,15 @@ export async function getAdminAttendance(req: Request, res: Response) {
         e.employee_code,
         e.department,
         e.job_title,
+        c.id as company_id,
         c.name as company_name,
         lr.id as location_id,
-        lr.latitude,
-        lr.longitude,
-        lr.accuracy,
+        COALESCE(ar.latitude, lr.latitude) as latitude,
+        COALESCE(ar.longitude, lr.longitude) as longitude,
+        COALESCE(ar.accuracy, lr.accuracy) as accuracy,
+        COALESCE(ar.ip_address, lr.ip_address) as ip_origen,
+        COALESCE(ar.device_info, 'Dispositivo móvil') as dispositivo,
+        ar.created_at as creado_en,
         lr.captured_at as location_captured_at
       FROM attendance_records ar
       JOIN employees e ON e.id = ar.employee_id

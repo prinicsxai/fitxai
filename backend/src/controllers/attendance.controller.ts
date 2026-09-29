@@ -5,12 +5,18 @@ import { config } from '../config/env';
 import { PunchType, PunchStatus, IncidentSeverity, IncidentStatus } from '@fitxai/shared';
 
 const punchSchema = z.object({
-  type: z.enum([PunchType.CHECK_IN, PunchType.CHECK_OUT]),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  accuracy: z.number().min(0), // Precisión en metros
+  type: z.union([
+    z.nativeEnum(PunchType),
+    z.literal('ENTRADA'),
+    z.literal('SALIDA'),
+  ]),
+  latitude: z.number().min(-90, 'Latitud debe estar entre -90 y 90').max(90, 'Latitud debe estar entre -90 y 90'),
+  longitude: z.number().min(-180, 'Longitud debe estar entre -180 y 180').max(180, 'Longitud debe estar entre -180 y 180'),
+  accuracy: z.number().min(0, 'La precisión no puede ser negativa'), // Precisión en metros
   altitude: z.number().optional(),
   deviceId: z.string().optional(),
+  deviceInfo: z.string().optional(),
+  isMocked: z.boolean().optional(),
   notes: z.string().max(500).optional(),
 });
 
@@ -34,7 +40,8 @@ async function resolveEmployeeId(userId: string, companyId: string, currentEmpId
 
 /**
  * POST /attendance/punch
- * Fichar Entrada o Salida con GPS puntual y verificación de precisión
+ * Fichar Entrada o Salida con GPS puntual, verificación estricta de precisión,
+ * prevención de duplicados, orden lógico y autoridad absoluta del servidor en fecha/hora.
  */
 export async function registerPunch(req: Request, res: Response) {
   const client = await dbPool.connect();
@@ -43,13 +50,35 @@ export async function registerPunch(req: Request, res: Response) {
     if (!parseResult.success) {
       return res.status(400).json({
         success: false,
-        error: 'Datos de fichaje inválidos',
+        error: 'Datos de fichaje inválidos o coordenadas fuera de rango',
         details: parseResult.error.errors,
       });
     }
 
-    const { type, latitude, longitude, accuracy, altitude, deviceId, notes } = parseResult.data;
+    const { type, latitude, longitude, accuracy, altitude, deviceId, deviceInfo, isMocked, notes } = parseResult.data;
     const user = req.user!;
+
+    // 1. Normalizar tipo de fichaje: ENTRADA -> CHECK_IN, SALIDA -> CHECK_OUT
+    const normalizedType: PunchType = 
+      (type === 'ENTRADA' || type === PunchType.CHECK_IN) ? PunchType.CHECK_IN : PunchType.CHECK_OUT;
+
+    // 2. Detección de ubicaciones falseadas (GPS Spoofing / Mocked)
+    if (isMocked && !config.allowMockLocations) {
+      return res.status(422).json({
+        success: false,
+        error: 'Ubicación simulada o falseada detectada. No está permitido el uso de aplicaciones de emulación o falseo GPS.',
+        code: 'MOCK_LOCATION_DETECTED',
+      });
+    }
+
+    // 3. Validación de coordenadas reales
+    if (latitude === 0 && longitude === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Coordenadas GPS no válidas (0, 0). Espera a que el dispositivo obtenga fijación de satélites real.',
+        code: 'INVALID_COORDINATES',
+      });
+    }
 
     const employeeId = await resolveEmployeeId(user.userId, user.companyId, user.employeeId);
     if (!employeeId) {
@@ -59,33 +88,166 @@ export async function registerPunch(req: Request, res: Response) {
       });
     }
 
-    // Evaluación de precisión GPS
-    const isAccuracyLow = accuracy > config.maxGpsAccuracyMeters;
+    // 4. Verificaciones de actividad del usuario, empresa y empleado con bloqueo de fila
+    const userStatusCheck = await client.query(
+      `SELECT u.status as user_status, c.is_active as company_active, e.is_active as employee_active
+       FROM users u
+       JOIN companies c ON c.id = u.company_id
+       JOIN employees e ON e.id = $1 AND e.company_id = u.company_id
+       WHERE u.id = $2 AND u.company_id = $3
+       FOR UPDATE OF e`,
+      [employeeId, user.userId, user.companyId]
+    );
+
+    if (userStatusCheck.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Usuario o empresa no encontrados en el sistema.',
+      });
+    }
+
+    const { user_status, company_active, employee_active } = userStatusCheck.rows[0];
+    const user_active = user_status === 'ACTIVE';
+
+    if (!company_active) {
+      return res.status(403).json({
+        success: false,
+        error: 'La empresa se encuentra inactiva. No se pueden registrar fichajes.',
+      });
+    }
+
+    if (!user_active) {
+      return res.status(403).json({
+        success: false,
+        error: 'Tu cuenta de usuario se encuentra desactivada.',
+      });
+    }
+
+    if (!employee_active) {
+      return res.status(403).json({
+        success: false,
+        error: 'Tu ficha de trabajador se encuentra desactivada.',
+      });
+    }
+
+    // 5. Consulta del último fichaje registrado para comprobaciones de duplicado y orden lógico
+    const lastPunchCheck = await client.query(
+      `SELECT id, type, timestamp, 
+              EXTRACT(EPOCH FROM (NOW() - timestamp)) as seconds_ago
+       FROM attendance_records
+       WHERE employee_id = $1 AND company_id = $2
+       ORDER BY timestamp DESC
+       LIMIT 1`,
+      [employeeId, user.companyId]
+    );
+
+    const lastPunch = lastPunchCheck.rows[0];
+    const isRapidDuplicate = lastPunch && lastPunch.type === normalizedType && (lastPunch.seconds_ago !== null && parseFloat(lastPunch.seconds_ago) < 30);
+
+    // 6. Prevención de fichajes duplicados (por ejemplo, doble pulsación accidental)
+    if (isRapidDuplicate) {
+      return res.status(409).json({
+        success: false,
+        error: `Fichaje duplicado detectado: Ya has registrado una ${normalizedType === PunchType.CHECK_IN ? 'entrada' : 'salida'} hace menos de 30 segundos.`,
+        code: 'DUPLICATE_PUNCH',
+        duplicate: true,
+      });
+    }
+
+    // 7. Validación de orden lógico:
+    // - No se puede fichar dos entradas seguidas
+    // - No se puede fichar dos salidas seguidas
+    // - No se puede fichar salida sin haber entrado previamente
+    if (normalizedType === PunchType.CHECK_IN) {
+      if (lastPunch && lastPunch.type === PunchType.CHECK_IN) {
+        return res.status(409).json({
+          success: false,
+          error: 'Secuencia lógica inválida: no se puede fichar dos entradas seguidas. Ya dispones de una jornada activa abierta.',
+          code: 'CONSECUTIVE_CHECK_IN',
+        });
+      }
+    } else if (normalizedType === PunchType.CHECK_OUT) {
+      if (!lastPunch || lastPunch.type === PunchType.CHECK_OUT) {
+        return res.status(409).json({
+          success: false,
+          error: 'Secuencia lógica inválida: no se puede fichar salida sin haber registrado una entrada previa.',
+          code: 'CHECK_OUT_WITHOUT_CHECK_IN',
+        });
+      }
+    }
+
+    // 7. Validación de precisión GPS
+    // Consultar configuración personalizada de empresa para precisión GPS máxima admisible
+    const settingRes = await client.query(
+      `SELECT value FROM settings WHERE company_id = $1 AND key = 'gps_accuracy_threshold_meters' LIMIT 1`,
+      [user.companyId]
+    );
+    const companyThreshold = settingRes.rows[0]?.value 
+      ? parseFloat(settingRes.rows[0].value) 
+      : config.maxGpsAccuracyMeters;
+
+    // Si la precisión es completamente inaceptable (> 250 metros), se rechaza solicitando reintento
+    if (accuracy > 250) {
+      return res.status(422).json({
+        success: false,
+        error: `Precisión GPS insuficiente (±${accuracy.toFixed(0)}m > 250m). Para garantizar la validez legal del registro, sitúate en un espacio con mejor cobertura GPS y pulsa Reintentar.`,
+        code: 'GPS_ACCURACY_TOO_LOW',
+        accuracy,
+        threshold: 250,
+        canRetry: true,
+      });
+    }
+
+    // Si la precisión supera el umbral normal pero está en rango de aceptación (150m-250m), se acepta pero se marca FLAGGED y genera incidencia
+    const isAccuracyLow = accuracy > companyThreshold;
     const punchStatus = isAccuracyLow ? PunchStatus.FLAGGED : PunchStatus.VERIFIED;
+
+    // Dispositivo o User-Agent
+    const userAgent = (req.headers['user-agent'] as string) || 'Dispositivo Móvil FITXAI';
+    const finalDeviceInfo = deviceInfo || (deviceId ? `Dispositivo ID: ${deviceId}` : userAgent.slice(0, 200));
 
     await client.query('BEGIN');
 
-    // 1. Insertar en attendance_records con timestamp exacto
+    // 8. Insertar en attendance_records con TIMESTAMP OFICIAL DETERMINADO EXCLUSIVAMENTE POR EL SERVIDOR
     const attendanceRes = await client.query(
-      `INSERT INTO attendance_records (employee_id, company_id, type, timestamp, status, device_id, notes)
-       VALUES ($1, $2, $3, NOW(), $4, $5, $6)
-       RETURNING id, type, timestamp, status`,
-      [employeeId, user.companyId, type, punchStatus, deviceId || null, notes || null]
+      `INSERT INTO attendance_records (
+         employee_id, company_id, type, timestamp, status, device_id, notes,
+         latitude, longitude, accuracy, ip_address, device_info
+       )
+       VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING 
+         id, employee_id, company_id, type, timestamp, status, notes,
+         latitude, longitude, accuracy, ip_address, device_info,
+         to_char(timestamp, 'YYYY-MM-DD') as fecha,
+         to_char(timestamp, 'HH24:MI:SS') as hora`,
+      [
+        employeeId,
+        user.companyId,
+        normalizedType,
+        punchStatus,
+        deviceId || null,
+        notes || null,
+        latitude,
+        longitude,
+        accuracy,
+        req.ip,
+        finalDeviceInfo,
+      ]
     );
 
     const attendanceRecord = attendanceRes.rows[0];
 
-    // 2. Insertar en location_records (ASOCIADO 1:1 EXCLUSIVAMENTE AL FICHAJE PUNTUAL)
+    // 9. Insertar en location_records (ASOCIADO 1:1 EXCLUSIVAMENTE AL FICHAJE PUNTUAL)
     const locationRes = await client.query(
-      `INSERT INTO location_records (attendance_record_id, latitude, longitude, accuracy, altitude, provider, ip_address)
-       VALUES ($1, $2, $3, $4, $5, 'gps_single_event', $6)
+      `INSERT INTO location_records (attendance_record_id, latitude, longitude, accuracy, altitude, provider, is_mocked, ip_address)
+       VALUES ($1, $2, $3, $4, $5, 'gps_single_event', $6, $7)
        RETURNING id, latitude, longitude, accuracy, captured_at`,
-      [attendanceRecord.id, latitude, longitude, accuracy, altitude || null, req.ip]
+      [attendanceRecord.id, latitude, longitude, accuracy, altitude || null, !!isMocked, req.ip]
     );
 
     const locationRecord = locationRes.rows[0];
 
-    // 3. Registrar incidente si la precisión fue degradada
+    // 10. Registrar incidente si la precisión fue degradada
     if (isAccuracyLow) {
       await client.query(
         `INSERT INTO incidents (company_id, employee_id, attendance_record_id, type, severity, description, status)
@@ -95,23 +257,23 @@ export async function registerPunch(req: Request, res: Response) {
           employeeId,
           attendanceRecord.id,
           IncidentSeverity.LOW,
-          `Fichaje registrado con precisión degradada (±${accuracy.toFixed(1)}m > umbral ${config.maxGpsAccuracyMeters}m)`,
+          `Fichaje registrado con precisión degradada (±${accuracy.toFixed(1)}m > umbral ${companyThreshold}m)`,
           IncidentStatus.PENDING,
         ]
       );
     }
 
-    // 4. Registrar en auditoría
+    // 11. Registrar en auditoría
     await client.query(
       `INSERT INTO audit_logs (company_id, user_id, action, entity_type, entity_id, ip_address, metadata)
        VALUES ($1, $2, $3, 'attendance_records', $4, $5, $6)`,
       [
         user.companyId,
         user.userId,
-        type === PunchType.CHECK_IN ? 'PUNCH_CHECK_IN' : 'PUNCH_CHECK_OUT',
+        normalizedType === PunchType.CHECK_IN ? 'PUNCH_CHECK_IN' : 'PUNCH_CHECK_OUT',
         attendanceRecord.id,
         req.ip,
-        JSON.stringify({ accuracy, latitude, longitude }),
+        JSON.stringify({ accuracy, latitude, longitude, ip: req.ip, device: finalDeviceInfo }),
       ]
     );
 
@@ -119,14 +281,22 @@ export async function registerPunch(req: Request, res: Response) {
 
     return res.status(201).json({
       success: true,
-      message: type === PunchType.CHECK_IN ? 'Entrada registrada con éxito' : 'Salida registrada con éxito',
+      message: normalizedType === PunchType.CHECK_IN ? 'Entrada registrada con éxito' : 'Salida registrada con éxito',
       record: {
         id: attendanceRecord.id,
         employeeId,
         companyId: user.companyId,
         type: attendanceRecord.type,
+        tipo: attendanceRecord.type === PunchType.CHECK_IN ? 'ENTRADA' : 'SALIDA',
+        fecha: attendanceRecord.fecha,
+        hora: attendanceRecord.hora,
         timestamp: attendanceRecord.timestamp,
         status: attendanceRecord.status,
+        latitude: attendanceRecord.latitude,
+        longitude: attendanceRecord.longitude,
+        accuracy: attendanceRecord.accuracy,
+        ipAddress: attendanceRecord.ip_address,
+        deviceInfo: attendanceRecord.device_info,
         location: {
           latitude: locationRecord.latitude,
           longitude: locationRecord.longitude,
@@ -410,3 +580,110 @@ export async function getMyIncidents(req: Request, res: Response) {
     return res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 }
+
+/**
+ * GET /attendance/:id
+ * Inspección detallada de un fichaje con verificación de punto GPS exacto (sin rutas)
+ */
+export async function getAttendanceById(req: Request, res: Response) {
+  try {
+    const user = req.user!;
+    const { id } = req.params;
+
+    const rows = await query<any>(
+      `SELECT 
+        ar.id,
+        ar.employee_id,
+        ar.company_id,
+        ar.type,
+        ar.timestamp,
+        ar.status,
+        ar.notes,
+        to_char(ar.timestamp, 'YYYY-MM-DD') as fecha,
+        to_char(ar.timestamp, 'HH24:MI:SS') as hora,
+        COALESCE(ar.latitude, lr.latitude) as latitude,
+        COALESCE(ar.longitude, lr.longitude) as longitude,
+        COALESCE(ar.accuracy, lr.accuracy) as accuracy,
+        COALESCE(ar.ip_address, lr.ip_address) as ip_origen,
+        COALESCE(ar.device_info, 'Dispositivo móvil registrado') as dispositivo,
+        ar.created_at,
+        e.first_name,
+        e.last_name,
+        e.document_id,
+        e.employee_code,
+        e.department,
+        e.job_title,
+        c.name as company_name,
+        c.cif as company_cif
+      FROM attendance_records ar
+      JOIN employees e ON e.id = ar.employee_id
+      JOIN companies c ON c.id = ar.company_id
+      LEFT JOIN location_records lr ON lr.attendance_record_id = ar.id
+      WHERE ar.id = $1 AND ar.company_id = $2
+      LIMIT 1`,
+      [id, user.companyId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Fichaje no encontrado' });
+    }
+
+    const r = rows[0];
+
+    // Si es un empleado normal, verificar que es su propio fichaje
+    if (user.role === 'EMPLOYEE' && user.employeeId && r.employee_id !== user.employeeId) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para consultar fichajes de otros trabajadores' });
+    }
+
+    const tipoLabel = r.type === 'CHECK_IN' ? 'ENTRADA' : 'SALIDA';
+    const statusLabel = r.status === 'VERIFIED' ? 'Verificado' : r.status === 'FLAGGED' ? 'Revisión Pendiente' : 'Rechazado';
+
+    return res.json({
+      success: true,
+      data: {
+        id: r.id,
+        trabajador_id: r.employee_id,
+        trabajador: {
+          id: r.employee_id,
+          nombre: `${r.first_name} ${r.last_name}`,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          documento: r.document_id,
+          codigo: r.employee_code,
+          departamento: r.department,
+          puesto: r.job_title,
+        },
+        empresa_id: r.company_id,
+        empresa_nombre: r.company_name,
+        empresa_cif: r.company_cif,
+        tipo: r.type,
+        tipo_label: tipoLabel,
+        fecha: r.fecha,
+        hora: r.hora,
+        timestamp: r.timestamp,
+        latitud: r.latitude,
+        longitud: r.longitude,
+        precision: r.accuracy,
+        ip_origen: r.ip_origen,
+        dispositivo: r.dispositivo,
+        status: r.status,
+        status_label: statusLabel,
+        notas: r.notes,
+        creado_en: r.created_at,
+        map_point: r.latitude && r.longitude ? {
+          latitude: r.latitude,
+          longitude: r.longitude,
+          accuracy: r.accuracy,
+          is_single_point: true,
+          tracks_allowed: false,
+          osm_url: `https://www.openstreetmap.org/?mlat=${r.latitude}&mlon=${r.longitude}#map=18/${r.latitude}/${r.longitude}`,
+          osm_embed_url: `https://www.openstreetmap.org/export/embed.html?bbox=${r.longitude - 0.005}%2C${r.latitude - 0.003}%2C${r.longitude + 0.005}%2C${r.latitude + 0.003}&layer=mapnik&marker=${r.latitude}%2C${r.longitude}`,
+        } : null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error fetching attendance by id:', error);
+    return res.status(500).json({ success: false, error: 'Error interno del servidor' });
+  }
+}
+

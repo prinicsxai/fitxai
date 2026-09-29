@@ -18,7 +18,7 @@
     "setup:admin": "npm run setup:admin --workspace=@fitxai/backend",
     "start:backend": "npm run start --workspace=@fitxai/backend",
     "start:frontend": "npm run preview --workspace=@fitxai/frontend",
-    "test": "node --test tests/*.test.js",
+    "test": "NODE_ENV=test node --test tests/*.test.js",
     "db:migrate": "psql -d fitxai_dev -f database/migrations/001_initial_schema.sql",
     "db:seed": "psql -d fitxai_dev -f database/seeds/initial_seed.sql"
   },

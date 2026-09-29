@@ -6,9 +6,12 @@ import {
   LogOut, 
   CheckCircle2, 
   Filter, 
-  RefreshCw
+  RefreshCw,
+  Info,
+  AlertTriangle
 } from 'lucide-react';
 import { AttendanceRecordItem, EmployeeItem } from '../types';
+import { PunchDetailModal } from './PunchDetailModal';
 
 interface AttendanceViewProps {
   records: AttendanceRecordItem[];
@@ -23,6 +26,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
   onRefresh,
   onViewLocation,
 }) => {
+  const [inspectingRecord, setInspectingRecord] = useState<AttendanceRecordItem | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<string>('ALL');
   const [selectedType, setSelectedType] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -224,20 +228,36 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className="inline-flex items-center space-x-1 text-emerald-400 font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Verificado</span>
-                      </span>
+                      {r.status === 'VERIFIED' ? (
+                        <span className="inline-flex items-center space-x-1 text-emerald-400 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Verificado</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center space-x-1 text-amber-400 font-medium">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>Revisión</span>
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      {r.latitude && r.longitude && (
+                      <div className="flex items-center justify-end space-x-2">
                         <button
-                          onClick={() => onViewLocation(r)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-emerald-400 hover:bg-slate-800 text-[11px] font-semibold transition"
+                          onClick={() => setInspectingRecord(r)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:bg-slate-800 hover:text-white text-[11px] font-semibold transition flex items-center gap-1"
                         >
-                          Ver en Mapa
+                          <Info className="w-3 h-3 text-emerald-400" />
+                          <span>Detalle</span>
                         </button>
-                      )}
+                        {r.latitude && r.longitude && (
+                          <button
+                            onClick={() => onViewLocation(r)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-emerald-400 hover:bg-slate-800 text-[11px] font-semibold transition"
+                          >
+                            Ver en Mapa
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -246,6 +266,14 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Modal de Detalle Exhaustivo del Fichaje */}
+      {inspectingRecord && (
+        <PunchDetailModal 
+          record={inspectingRecord}
+          onClose={() => setInspectingRecord(null)}
+        />
+      )}
     </div>
   );
 };
