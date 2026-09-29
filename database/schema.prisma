@@ -1,0 +1,290 @@
+// FITXAI Prisma Schema
+// Generador y fuente de datos
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+  MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum PunchType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+enum PunchStatus {
+  VERIFIED
+  FLAGGED
+  REJECTED
+}
+
+enum IncidentStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ALERT
+}
+
+// ----------------------------------------------------
+// ENTIDADES
+// ----------------------------------------------------
+
+// 1. companies
+model Company {
+  id             String              @id @default(uuid())
+  name           String
+  cif            String              @unique
+  address        String?
+  contactEmail   String
+  contactPhone   String?
+  timezone       String              @default("Europe/Madrid")
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  users          User[]
+  employees      Employee[]
+  attendances    AttendanceRecord[]
+  incidents      Incident[]
+  auditLogs      AuditLog[]
+  settings       Setting[]
+
+  @@map("companies")
+}
+
+// 2. users
+model User {
+  id             String          @id @default(uuid())
+  companyId      String          @map("company_id")
+  email          String          @unique
+  passwordHash   String          @map("password_hash")
+  role           UserRole        @default(EMPLOYEE)
+  status         UserStatus      @default(ACTIVE)
+  lastLoginAt    DateTime?       @map("last_login_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee       Employee?
+  devices        Device[]
+  sessions       Session[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+// 3. employees
+model Employee {
+  id             String              @id @default(uuid())
+  userId         String              @unique @map("user_id")
+  companyId      String              @map("company_id")
+  firstName      String              @map("first_name")
+  lastName       String              @map("last_name")
+  documentId     String              @map("document_id") // DNI/NIE
+  employeeCode   String?             @map("employee_code")
+  department     String?
+  jobTitle       String?             @map("job_title")
+  hireDate       DateTime            @default(now()) @map("hire_date")
+  isActive       Boolean             @default(true) @map("is_active")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  attendances    AttendanceRecord[]
+  incidents      Incident[]
+
+  @@unique([companyId, documentId])
+  @@index([companyId])
+  @@map("employees")
+}
+
+// 4. attendance_records
+model AttendanceRecord {
+  id             String          @id @default(uuid())
+  employeeId     String          @map("employee_id")
+  companyId      String          @map("company_id")
+  type           PunchType
+  timestamp      DateTime        @default(now())
+  status         PunchStatus     @default(VERIFIED)
+  deviceId       String?         @map("device_id")
+  notes          String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  employee       Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  device         Device?         @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  locationRecord LocationRecord?
+  incidents      Incident[]
+
+  @@index([employeeId, timestamp])
+  @@index([companyId, timestamp])
+  @@map("attendance_records")
+}
+
+// 5. location_records
+// POLÍTICA: Asociado 1:1 exclusivamente a un fichaje puntual. NO tracking continuo.
+model LocationRecord {
+  id                 String           @id @default(uuid())
+  attendanceRecordId String           @unique @map("attendance_record_id")
+  latitude           Float
+  longitude          Float
+  accuracy           Float            // Precisión GPS en metros
+  altitude           Float?
+  capturedAt         DateTime         @default(now()) @map("captured_at")
+  provider           String?          @default("gps")
+  isMocked           Boolean          @default(false) @map("is_mocked")
+  ipAddress          String?          @map("ip_address")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id], onDelete: Cascade)
+
+  @@index([attendanceRecordId])
+  @@map("location_records")
+}
+
+// 6. devices
+model Device {
+  id                String             @id @default(uuid())
+  userId            String             @map("user_id")
+  deviceFingerprint String             @map("device_fingerprint")
+  platform          String             // android | ios | web
+  osVersion         String?            @map("os_version")
+  appVersion        String?            @map("app_version")
+  deviceName        String?            @map("device_name")
+  isTrusted         Boolean            @default(true) @map("is_trusted")
+  lastUsedAt        DateTime           @default(now()) @map("last_used_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+  attendances       AttendanceRecord[]
+
+  @@unique([userId, deviceFingerprint])
+  @@map("devices")
+}
+
+// 7. sessions
+model Session {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  deviceId       String?   @map("device_id")
+  tokenHash      String    @unique @map("token_hash")
+  ipAddress      String?   @map("ip_address")
+  userAgent      String?   @map("user_agent")
+  expiresAt      DateTime  @map("expires_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device         Device?   @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// 8. incidents
+model Incident {
+  id                 String           @id @default(uuid())
+  companyId          String           @map("company_id")
+  employeeId         String           @map("employee_id")
+  attendanceRecordId String?          @map("attendance_record_id")
+  type               String
+  severity           IncidentSeverity @default(MEDIUM)
+  description        String
+  status             IncidentStatus   @default(PENDING)
+  resolvedById       String?          @map("resolved_by_id")
+  resolvedAt         DateTime?        @map("resolved_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  employee           Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  attendanceRecord   AttendanceRecord? @relation(fields: [attendanceRecordId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status])
+  @@map("incidents")
+}
+
+// 9. audit_logs
+model AuditLog {
+  id             String    @id @default(uuid())
+  companyId      String?   @map("company_id")
+  userId         String?   @map("user_id")
+  action         String
+  entityType     String    @map("entity_type")
+  entityId       String?   @map("entity_id")
+  ipAddress      String?   @map("ip_address")
+  metadata       Json?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@map("audit_logs")
+}
+
+// 10. notifications
+model Notification {
+  id             String           @id @default(uuid())
+  userId         String           @map("user_id")
+  title          String
+  message        String
+  type           NotificationType @default(INFO)
+  isRead         Boolean          @default(false) @map("is_read")
+  metadata       Json?
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// 11. settings
+model Setting {
+  id             String    @id @default(uuid())
+  companyId      String?   @map("company_id") // Null para global
+  key            String
+  value          String
+  description    String?
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  company        Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, key])
+  @@map("settings")
+}

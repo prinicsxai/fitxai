@@ -1,0 +1,28 @@
+{
+  "name": "fitxai-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FITXAI - Sistema Profesional de Fichaje y Control Horario",
+  "workspaces": [
+    "shared",
+    "backend",
+    "frontend",
+    "mobile"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=@fitxai/shared && npm run build --workspace=@fitxai/backend && npm run build --workspace=@fitxai/frontend",
+    "build:shared": "npm run build --workspace=@fitxai/shared",
+    "dev:backend": "npm run dev --workspace=@fitxai/backend",
+    "dev:frontend": "npm run dev --workspace=@fitxai/frontend",
+    "dev:mobile": "npm run dev --workspace=@fitxai/mobile",
+    "start:backend": "npm run start --workspace=@fitxai/backend",
+    "start:frontend": "npm run preview --workspace=@fitxai/frontend",
+    "test": "npm run test --workspace=@fitxai/backend",
+    "db:migrate": "psql -d fitxai_dev -f database/migrations/001_initial_schema.sql",
+    "db:seed": "psql -d fitxai_dev -f database/seeds/initial_seed.sql"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}

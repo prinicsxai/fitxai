@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "FITXAI Mobile",
+    "slug": "fitxai-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fitxai.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "FITXAI requiere acceso al GPS únicamente en el instante exacto de presionar 'Fichar' para registrar el punto de entrada o salida. No se realiza seguimiento continuo ni en segundo plano."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "package": "com.fitxai.mobile",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
