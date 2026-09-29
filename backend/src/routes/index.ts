@@ -17,7 +17,11 @@ import {
   deleteEmployee 
 } from '../controllers/employee.controller';
 import { registerPunch } from '../controllers/attendance.controller';
-import { getAdminAttendance, getAdminDashboardStats } from '../controllers/admin.controller';
+import { 
+  getAdminAttendance, 
+  getAdminDashboardStats, 
+  getEmployeeAttendanceHistory 
+} from '../controllers/admin.controller';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
 import { authRateLimiter } from '../middlewares/security.middleware';
 import { UserRole } from '@fitxai/shared';
@@ -54,6 +58,7 @@ apiRouter.get('/companies', requireAuth, requireRole(UserRole.ADMIN, UserRole.MA
 // ==========================================
 apiRouter.get('/employees', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getEmployees);
 apiRouter.get('/employees/:id', requireAuth, getEmployeeById);
+apiRouter.get('/employees/:id/attendance', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getEmployeeAttendanceHistory);
 apiRouter.post('/employees', requireAuth, requireRole(UserRole.ADMIN), createEmployee);
 apiRouter.put('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), updateEmployee);
 apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), deleteEmployee);
