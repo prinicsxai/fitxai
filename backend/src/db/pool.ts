@@ -10,7 +10,7 @@ const poolConfig: PoolConfig = {
 
 // En producción exigir SSL si no es localhost
 if (config.env === 'production' && !config.databaseUrl.includes('localhost')) {
-  poolConfig.ssl = { rejectUnauthorized: true };
+  poolConfig.ssl = { rejectUnauthorized: false };
 }
 
 export const dbPool = new Pool(poolConfig);
