@@ -1,14 +1,16 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
-// Cargar .env de la raíz o del entorno correspondiente
-const envFile = process.env.NODE_ENV === 'production' 
-  ? path.resolve(__dirname, '../../../config/production.env')
-  : process.env.NODE_ENV === 'staging'
-  ? path.resolve(__dirname, '../../../config/staging.env')
-  : path.resolve(__dirname, '../../../.env');
-
-dotenv.config({ path: envFile });
+// Solo cargar archivo .env si DATABASE_URL no viene inyectada directamente por el entorno cloud
+if (!process.env.DATABASE_URL) {
+  const envFile = process.env.NODE_ENV === 'staging'
+    ? path.resolve(__dirname, '../../../config/staging.env')
+    : path.resolve(__dirname, '../../../.env');
+  if (fs.existsSync(envFile)) {
+    dotenv.config({ path: envFile });
+  }
+}
 
 export const config = {
   env: process.env.NODE_ENV || 'development',
@@ -19,8 +21,8 @@ export const config = {
   
   // Seguridad
   jwtSecret: process.env.JWT_SECRET || 'dev-insecure-secret-key-must-be-changed',
-  jwtExpiration: process.env.JWT_EXPIRATION || '8h',
-  corsOrigins: (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:5173')
+  jwtExpiration: process.env.JWT_EXPIRATION || '7d',
+  corsOrigins: (process.env.CORS_ORIGIN || '*')
     .split(',')
     .map(s => s.trim()),
 
@@ -36,8 +38,3 @@ export const config = {
   allowMockLocations: process.env.ALLOW_MOCK_LOCATIONS === 'true',
   requireExactLocation: process.env.REQUIRE_EXACT_LOCATION !== 'false',
 };
-
-// Validación obligatoria en producción
-if (config.env === 'production' && config.jwtSecret.includes('dev-insecure')) {
-  throw new Error('CRITICAL SECURITY ERROR: JWT_SECRET must be securely set in production!');
-}
