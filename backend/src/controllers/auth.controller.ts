@@ -377,3 +377,123 @@ export async function changePassword(req: Request, res: Response) {
     return res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 }
+
+const registerCompanySchema = z.object({
+  companyName: z.string().min(2, 'El nombre de la empresa es obligatorio'),
+  cif: z.string().min(4, 'El CIF es obligatorio'),
+  adminFirstName: z.string().min(2, 'El nombre del administrador es obligatorio'),
+  adminLastName: z.string().min(2, 'Los apellidos son obligatorios'),
+  adminEmail: z.string().email('Email inválido'),
+  adminPassword: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  adminPhone: z.string().optional(),
+});
+
+/**
+ * POST /auth/register-company
+ * Registro de nueva empresa y su administrador inicial (onboarding producción)
+ */
+export async function registerCompany(req: Request, res: Response) {
+  try {
+    const parseResult = registerCompanySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        error: parseResult.error.errors[0]?.message || 'Datos incompletos',
+      });
+    }
+
+    const { companyName, cif, adminFirstName, adminLastName, adminEmail, adminPassword, adminPhone } = parseResult.data;
+
+    // Verificar si el CIF ya existe
+    const existingCompany = await query<any>(
+      `SELECT id FROM companies WHERE LOWER(cif) = LOWER($1) LIMIT 1`,
+      [cif]
+    );
+    if (existingCompany.length > 0) {
+      return res.status(409).json({ success: false, error: 'Ya existe una empresa registrada con ese CIF' });
+    }
+
+    // Verificar si el email ya existe
+    const existingUser = await query<any>(
+      `SELECT id FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+      [adminEmail]
+    );
+    if (existingUser.length > 0) {
+      return res.status(409).json({ success: false, error: 'Ya existe un usuario con este correo electrónico' });
+    }
+
+    // Crear empresa
+    const companyRes = await query<any>(
+      `INSERT INTO companies (name, cif, contact_email, contact_phone, is_active)
+       VALUES ($1, $2, $3, $4, true)
+       RETURNING id, name, cif`,
+      [companyName, cif, adminEmail, adminPhone || null]
+    );
+    const newCompany = companyRes[0];
+
+    // Crear configuración por defecto
+    await query(
+      `INSERT INTO settings (company_id, key, value, description)
+       VALUES ($1, 'gps_accuracy_threshold', '150', 'Tolerancia estándar GPS')`,
+      [newCompany.id]
+    );
+
+    // Crear admin con hash bcrypt
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    const userRes = await query<any>(
+      `INSERT INTO users (company_id, email, password_hash, first_name, last_name, phone, role, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ADMIN', 'ACTIVE')
+       RETURNING id, email, first_name, last_name, phone, role, status, created_at`,
+      [newCompany.id, adminEmail.toLowerCase().trim(), passwordHash, adminFirstName, adminLastName, adminPhone || null]
+    );
+    const newUser = userRes[0];
+
+    // Generar Token JWT
+    const token = jwt.sign(
+      {
+        userId: newUser.id,
+        companyId: newCompany.id,
+        role: newUser.role,
+        email: newUser.email,
+      },
+      config.jwtSecret,
+      { expiresIn: (config.jwtExpiration || '7d') as any }
+    );
+
+    const tokenHashStr = hashToken(token);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Registrar sesión
+    await query(
+      `INSERT INTO sessions (user_id, company_id, token_hash, ip_address, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [newUser.id, newCompany.id, tokenHashStr, req.ip, req.headers['user-agent'] || 'Web Browser', expiresAt]
+    );
+
+    // Auditoría
+    await query(
+      `INSERT INTO audit_logs (company_id, user_id, action, entity_type, entity_id, ip_address)
+       VALUES ($1, $2, 'COMPANY_REGISTERED', 'companies', $1, $3)`,
+      [newCompany.id, newUser.id, req.ip]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: 'Empresa y administrador registrados con éxito',
+      token,
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        firstName: newUser.first_name,
+        lastName: newUser.last_name,
+        phone: newUser.phone,
+        role: newUser.role,
+        companyId: newCompany.id,
+        companyName: newCompany.name,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error registrando empresa:', error);
+    return res.status(500).json({ success: false, error: 'Error interno del servidor al registrar la empresa' });
+  }
+}

@@ -5,7 +5,8 @@ import {
   logout, 
   forgotPassword, 
   resetPassword, 
-  changePassword 
+  changePassword,
+  registerCompany 
 } from '../controllers/auth.controller';
 import { getMe } from '../controllers/user.controller';
 import { 
@@ -70,6 +71,7 @@ apiRouter.get('/health', getHealthStatus);
 // 2. AUTENTICACIÓN
 // ==========================================
 apiRouter.post('/auth/login', authRateLimiter, login);
+apiRouter.post('/auth/register-company', authRateLimiter, registerCompany);
 apiRouter.post('/auth/logout', requireAuth, logout);
 apiRouter.post('/auth/forgot-password', authRateLimiter, forgotPassword);
 apiRouter.post('/auth/reset-password', authRateLimiter, resetPassword);
