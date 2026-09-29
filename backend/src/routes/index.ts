@@ -16,7 +16,13 @@ import {
   updateEmployee, 
   deleteEmployee 
 } from '../controllers/employee.controller';
-import { registerPunch } from '../controllers/attendance.controller';
+import { 
+  registerPunch, 
+  getMyAttendanceStatus, 
+  getMyAttendanceHistory, 
+  createWorkerIncident, 
+  getMyIncidents 
+} from '../controllers/attendance.controller';
 import { 
   getAdminAttendance, 
   getAdminDashboardStats, 
@@ -64,9 +70,13 @@ apiRouter.put('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), update
 apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), deleteEmployee);
 
 // ==========================================
-// 6. FICHAJES (TRABAJADOR)
+// 6. FICHAJES E INCIDENCIAS (TRABAJADOR)
 // ==========================================
 apiRouter.post('/attendance/punch', requireAuth, registerPunch);
+apiRouter.get('/attendance/my-status', requireAuth, getMyAttendanceStatus);
+apiRouter.get('/attendance/my-punches', requireAuth, getMyAttendanceHistory);
+apiRouter.post('/incidents', requireAuth, createWorkerIncident);
+apiRouter.get('/incidents/my-incidents', requireAuth, getMyIncidents);
 
 // ==========================================
 // 7. PANEL ADMINISTRADOR

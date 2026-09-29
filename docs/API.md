@@ -174,3 +174,60 @@ Desactiva a un trabajador y revoca inmediatamente todas sus sesiones activas.
 ### `POST /attendance/punch`
 Registra un fichaje puntual (Entrada o Salida) con adquisición única de GPS puntual.
 - **Autenticación**: Bearer JWT (Rol `EMPLOYEE` o superior).
+- **Body**:
+```json
+{
+  "type": "CHECK_IN",
+  "latitude": 40.416775,
+  "longitude": -3.703790,
+  "accuracy": 8.5,
+  "altitude": 660,
+  "notes": "Entrada de jornada"
+}
+```
+
+### `GET /attendance/my-status`
+Obtiene el estado en tiempo real de la jornada de hoy del trabajador.
+- **Autenticación**: Bearer JWT (`EMPLOYEE`).
+- **Respuesta 200 OK**:
+```json
+{
+  "success": true,
+  "data": {
+    "status": "ACTIVE",
+    "statusText": "JORNADA ACTIVA",
+    "actionButton": "FICHAR SALIDA",
+    "nextType": "CHECK_OUT",
+    "checkInTime": "08:57",
+    "checkOutTime": null,
+    "hoursWorked": null,
+    "punchesCount": 1
+  }
+}
+```
+
+### `GET /attendance/my-punches`
+Historial de fichajes propio del trabajador aislado de cualquier otro trabajador.
+- **Autenticación**: Bearer JWT (`EMPLOYEE`).
+- **Respuesta 200 OK**: Lista agrupada por jornadas con entradas, salidas, horas y ubicaciones.
+
+---
+
+## 7. Incidencias del Trabajador
+
+### `POST /incidents`
+Permite al trabajador notificar una incidencia o justificación de jornada al administrador.
+- **Autenticación**: Bearer JWT (`EMPLOYEE`).
+- **Body**:
+```json
+{
+  "type": "OLVIDO_FICHAJE",
+  "description": "Se me olvidó fichar al entrar por fallo de cobertura en el sótano.",
+  "severity": "MEDIUM"
+}
+```
+
+### `GET /incidents/my-incidents`
+Lista las incidencias registradas por el propio trabajador.
+- **Autenticación**: Bearer JWT (`EMPLOYEE`).
+
