@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: fitxai-app
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fitxai-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRATION
+        value: 7d
+      - key: GPS_ACCURACY_THRESHOLD_METERS
+        value: 150
+      - key: GPS_MAX_ALLOWED_ACCURACY_METERS
+        value: 250
+
+databases:
+  - name: fitxai-db
+    plan: free
+    region: frankfurt
+    databaseName: fitxai_prod
+    user: fitxai_admin

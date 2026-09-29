@@ -23,16 +23,36 @@ app.use(sanitizeInputMiddleware);
 // Rutas Principales
 app.use(config.apiPrefix, apiRouter);
 
-// Ruta raíz informativa
-app.get('/', (req, res) => {
-  res.json({
-    name: 'FITXAI API Backend',
-    version: '1.0.0',
-    status: 'online',
-    health: `${config.apiPrefix}/health`,
-    docs: '/docs',
+import path from 'path';
+import fs from 'fs';
+
+// Servir Frontend SPA en producción si está compilado
+const distCandidates = [
+  path.resolve(__dirname, '../../frontend/dist'),
+  path.resolve(process.cwd(), 'frontend/dist'),
+];
+const staticDistPath = distCandidates.find((p) => fs.existsSync(p));
+
+if (staticDistPath) {
+  app.use(express.static(staticDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/health')) {
+      return next();
+    }
+    res.sendFile(path.join(staticDistPath, 'index.html'));
   });
-});
+} else {
+  // Ruta raíz informativa en caso de modo API pura
+  app.get('/', (req, res) => {
+    res.json({
+      name: 'FITXAI API Backend',
+      version: '1.0.0',
+      status: 'online',
+      health: `${config.apiPrefix}/health`,
+      docs: '/docs',
+    });
+  });
+}
 
 // 404 Handler
 app.use((req, res) => {
