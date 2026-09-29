@@ -555,6 +555,7 @@ export async function getMyAttendanceHistory(req: Request, res: Response) {
 
     return res.json({
       success: true,
+      data: records,
       rawPunches: records,
       days: groupedDays,
     });

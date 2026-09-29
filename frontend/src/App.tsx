@@ -20,6 +20,7 @@ import {
   RealtimeNotificationToast, 
   PunchNotificationData 
 } from './components/RealtimeNotificationToast';
+import { WorkerView } from './components/WorkerView';
 import { 
   realtimeManager, 
   RealtimeConnectionStatus, 
@@ -39,6 +40,7 @@ export default function App() {
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [activeSection, setActiveSection] = useState<SidebarSection>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showWorkerPortalForAdmin, setShowWorkerPortalForAdmin] = useState(false);
 
   // Estados de datos
   const [stats, setStats] = useState<DashboardStats>({
@@ -106,8 +108,10 @@ export default function App() {
     setCheckingAuth(false);
   }, []);
 
-  // 3. Cargar Datos de Negocio (Stats, Empleados, Fichajes)
+  // 3. Cargar Datos de Negocio (Stats, Empleados, Fichajes) - Sólo para Administradores
   const loadBusinessData = useCallback(async () => {
+    if (!user || user.role === 'EMPLOYEE') return;
+
     setIsRefreshing(true);
     await Promise.all([
       // Stats
@@ -131,7 +135,7 @@ export default function App() {
       checkHealth(),
     ]);
     setIsRefreshing(false);
-  }, [checkHealth]);
+  }, [user, checkHealth]);
 
   // Inicialización
   useEffect(() => {
@@ -142,14 +146,14 @@ export default function App() {
   }, [loadUser, checkHealth]);
 
   useEffect(() => {
-    if (user) {
+    if (user && user.role !== 'EMPLOYEE') {
       loadBusinessData();
     }
   }, [user, loadBusinessData]);
 
-  // 4. Conexión y suscripción a eventos en tiempo real (SSE)
+  // 4. Conexión y suscripción a eventos en tiempo real (SSE) - Administradores
   useEffect(() => {
-    if (!user) {
+    if (!user || user.role === 'EMPLOYEE') {
       realtimeManager.disconnect();
       return;
     }
@@ -243,6 +247,19 @@ export default function App() {
     return <LoginView onLoginSuccess={(u) => setUser(u)} />;
   }
 
+  // Si es un trabajador (o un administrador previsualizando el portal móvil), renderizar la interfaz web del trabajador
+  if (user.role === 'EMPLOYEE' || showWorkerPortalForAdmin) {
+    return (
+      <WorkerView
+        user={user}
+        onLogout={handleLogout}
+        onSwitchToAdmin={
+          user.role !== 'EMPLOYEE' ? () => setShowWorkerPortalForAdmin(false) : undefined
+        }
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col lg:flex-row antialiased">
       {/* Barra Lateral Profesional (10 items) */}
@@ -267,6 +284,7 @@ export default function App() {
           latencyMs={dbLatency}
           realtimeStatus={realtimeStatus}
           onReconnectRealtime={() => realtimeManager.reconnect()}
+          onToggleWorkerPortal={() => setShowWorkerPortalForAdmin(true)}
         />
 
         {/* Contenedor de Vista Dinámica */}

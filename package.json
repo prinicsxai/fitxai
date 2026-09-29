@@ -6,15 +6,13 @@
   "workspaces": [
     "shared",
     "backend",
-    "frontend",
-    "mobile"
+    "frontend"
   ],
   "scripts": {
     "build": "npm run build --workspace=@fitxai/shared && npm run build --workspace=@fitxai/backend && npm run build --workspace=@fitxai/frontend",
     "build:shared": "npm run build --workspace=@fitxai/shared",
     "dev:backend": "npm run dev --workspace=@fitxai/backend",
     "dev:frontend": "npm run dev --workspace=@fitxai/frontend",
-    "dev:mobile": "npm run dev --workspace=@fitxai/mobile",
     "setup:admin": "npm run setup:admin --workspace=@fitxai/backend",
     "start:backend": "npm run start --workspace=@fitxai/backend",
     "start:frontend": "npm run preview --workspace=@fitxai/frontend",

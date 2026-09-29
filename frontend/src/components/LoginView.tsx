@@ -41,11 +41,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
     setLoading(false);
   };
 
-  const setDemoCredentials = () => {
-    setEmail('admin@techlogistics.es');
-    setPassword('Admin1234!');
-  };
-
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
       <div className="w-full max-w-md space-y-6">
@@ -117,14 +112,30 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess }) => {
           </form>
 
           {/* Acceso Rápido Demo */}
-          <div className="pt-4 border-t border-slate-800/80 text-center">
-            <button
-              type="button"
-              onClick={setDemoCredentials}
-              className="text-[11px] text-slate-400 hover:text-emerald-400 underline transition"
-            >
-              Cargar credenciales de Administrador Demo
-            </button>
+          <div className="pt-4 border-t border-slate-800/80 space-y-2 text-center">
+            <div className="text-[10px] uppercase font-semibold text-slate-500">Credenciales de Acceso Rápido</div>
+            <div className="flex items-center justify-center space-x-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('admin@techlogistics.es');
+                  setPassword('Admin1234!');
+                }}
+                className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+              >
+                Admin Demo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('marc.puig@techlogistics.es');
+                  setPassword('Worker1234!');
+                }}
+                className="px-2.5 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg transition"
+              >
+                Trabajador Demo
+              </button>
+            </div>
           </div>
         </div>
 

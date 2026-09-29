@@ -102,8 +102,17 @@ apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), del
 // 6. FICHAJES (TRABAJADOR Y AUDITORÍA)
 // ==========================================
 apiRouter.post('/attendance/punch', requireAuth, registerPunch);
+apiRouter.post('/attendance/check-in', requireAuth, (req, res, next) => {
+  req.body = { ...req.body, type: 'CHECK_IN' };
+  next();
+}, registerPunch);
+apiRouter.post('/attendance/check-out', requireAuth, (req, res, next) => {
+  req.body = { ...req.body, type: 'CHECK_OUT' };
+  next();
+}, registerPunch);
 apiRouter.get('/attendance/my-status', requireAuth, getMyAttendanceStatus);
 apiRouter.get('/attendance/my-punches', requireAuth, getMyAttendanceHistory);
+apiRouter.get('/attendance/history', requireAuth, getMyAttendanceHistory);
 apiRouter.get('/attendance/:id', requireAuth, getAttendanceById);
 apiRouter.put('/attendance/:id/correct', requireAuth, requireRole(UserRole.ADMIN), correctAttendanceRecord);
 
@@ -137,6 +146,7 @@ apiRouter.get('/reports/export/pdf', requireAuth, requireRole(UserRole.ADMIN, Us
 // 10. AUDITORÍA INMUTABLE DEL SISTEMA
 // ==========================================
 apiRouter.get('/audit/logs', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAuditLogs);
+apiRouter.get('/audit-logs', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAuditLogs);
 
 // ==========================================
 // 11. PANEL ADMINISTRADOR (DASHBOARD & STATS)

@@ -2,7 +2,7 @@
  * API Client para FITXAI Web Panel
  */
 
-const API_BASE = '/api/v1';
+const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api/v1';
 
 export function getStoredToken(): string | null {
   return localStorage.getItem('fitxai_token');

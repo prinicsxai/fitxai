@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, RefreshCw, Database, Radio, WifiOff } from 'lucide-react';
+import { Menu, RefreshCw, Database, Radio, WifiOff, Smartphone } from 'lucide-react';
 import { SidebarSection } from '../types';
 import { RealtimeConnectionStatus } from '../api/realtime';
 
@@ -12,6 +12,7 @@ interface HeaderProps {
   latencyMs?: number;
   realtimeStatus?: RealtimeConnectionStatus;
   onReconnectRealtime?: () => void;
+  onToggleWorkerPortal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   latencyMs,
   realtimeStatus = 'disconnected',
   onReconnectRealtime,
+  onToggleWorkerPortal,
 }) => {
   const titles: Record<SidebarSection, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard General', subtitle: 'Métricas de jornada y control en tiempo real' },
@@ -104,6 +106,18 @@ export const Header: React.FC<HeaderProps> = ({
             DB: {dbStatus === 'connected' ? `Online (${latencyMs || 1}ms)` : 'Conectando...'}
           </span>
         </div>
+
+        {/* Portal Trabajador Test Button */}
+        {onToggleWorkerPortal && (
+          <button
+            onClick={onToggleWorkerPortal}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 text-xs font-semibold text-slate-300 hover:text-emerald-400 transition"
+            title="Abrir la interfaz web del trabajador (móvil/web)"
+          >
+            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden md:inline">Vista Fichaje</span>
+          </button>
+        )}
 
         {/* Reload button */}
         <button
