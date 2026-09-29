@@ -15,6 +15,16 @@ import {
   AccountView 
 } from './components/OtherViews';
 import { LoginView } from './components/LoginView';
+import { PunchDetailModal } from './components/PunchDetailModal';
+import { 
+  RealtimeNotificationToast, 
+  PunchNotificationData 
+} from './components/RealtimeNotificationToast';
+import { 
+  realtimeManager, 
+  RealtimeConnectionStatus, 
+  RealtimePunchEvent 
+} from './api/realtime';
 import { 
   SidebarSection, 
   UserProfile, 
@@ -46,10 +56,14 @@ export default function App() {
   const [selectedRecordForMap, setSelectedRecordForMap] = useState<AttendanceRecordItem | null>(null);
   const [selectedEmployeeForDetail, setSelectedEmployeeForDetail] = useState<EmployeeItem | null>(null);
 
-  // Estados de carga y salud del servidor
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'error' | 'checking'>('checking');
   const [dbLatency, setDbLatency] = useState<number>(1);
+
+  // Estados de Tiempo Real (SSE) y Notificaciones en Vivo
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeConnectionStatus>('disconnected');
+  const [liveNotifications, setLiveNotifications] = useState<PunchNotificationData[]>([]);
+  const [inspectingPunch, setInspectingPunch] = useState<AttendanceRecordItem | null>(null);
 
   // 1. Cargar Salud del Sistema (DB Connection)
   const checkHealth = useCallback(async () => {
@@ -133,8 +147,77 @@ export default function App() {
     }
   }, [user, loadBusinessData]);
 
+  // 4. Conexión y suscripción a eventos en tiempo real (SSE)
+  useEffect(() => {
+    if (!user) {
+      realtimeManager.disconnect();
+      return;
+    }
+
+    // Iniciar conexión al canal SSE
+    realtimeManager.connect();
+
+    // Suscripción al estado de la conexión
+    const unsubStatus = realtimeManager.subscribeStatus((newStatus) => {
+      setRealtimeStatus(newStatus);
+      // Si se reconecta tras un corte de red, sincronizar datos con el servidor
+      if (newStatus === 'connected') {
+        loadBusinessData();
+      }
+    });
+
+    // Suscripción al evento NEW_PUNCH emitido por el backend
+    const unsubPunch = realtimeManager.subscribePunch((event: RealtimePunchEvent) => {
+      console.log('[APP] Evento NEW_PUNCH recibido en vivo:', event.record.id);
+
+      // 1. Insertar el nuevo fichaje en la tabla sin recargar la página
+      setAttendance((prev) => [
+        event.record,
+        ...prev.filter((p) => p.id !== event.record.id),
+      ]);
+
+      // 2. Actualizar contadores del dashboard en vivo
+      setStats((prev) => {
+        const isCheckIn = event.record.type === 'CHECK_IN';
+        return {
+          ...prev,
+          todayPunches: prev.todayPunches + 1,
+          todayCheckIns: isCheckIn ? prev.todayCheckIns + 1 : prev.todayCheckIns,
+          todayCheckOuts: !isCheckIn ? prev.todayCheckOuts + 1 : prev.todayCheckOuts,
+        };
+      });
+
+      // 3. Sincronizar estadísticas consolidadas en segundo plano
+      apiRequest('/admin/stats').then((res) => {
+        if (res.success && res.data) {
+          setStats(res.data);
+        }
+      });
+
+      // 4. Mostrar notificación visual flotante
+      const newNotif: PunchNotificationData = {
+        id: event.eventId,
+        title: event.notification.title,
+        workerName: event.notification.workerName,
+        punchType: event.notification.punchType,
+        time: event.notification.time,
+        locationStatus: event.notification.locationStatus,
+        record: event.record,
+      };
+
+      setLiveNotifications((prev) => [newNotif, ...prev.slice(0, 3)]);
+    });
+
+    return () => {
+      unsubStatus();
+      unsubPunch();
+      realtimeManager.disconnect();
+    };
+  }, [user, loadBusinessData]);
+
   // Manejador de Logout
   const handleLogout = async () => {
+    realtimeManager.disconnect();
     await apiRequest('/auth/logout', { method: 'POST' });
     clearStoredToken();
     setUser(null);
@@ -182,6 +265,8 @@ export default function App() {
           isRefreshing={isRefreshing}
           dbStatus={dbStatus}
           latencyMs={dbLatency}
+          realtimeStatus={realtimeStatus}
+          onReconnectRealtime={() => realtimeManager.reconnect()}
         />
 
         {/* Contenedor de Vista Dinámica */}
@@ -240,6 +325,21 @@ export default function App() {
             setSelectedEmployeeForDetail(null);
             setActiveSection('employees');
           }}
+        />
+      )}
+
+      {/* Notificaciones Flotantes de Fichajes en Vivo */}
+      <RealtimeNotificationToast
+        notifications={liveNotifications}
+        onDismiss={(id) => setLiveNotifications((prev) => prev.filter((n) => n.id !== id))}
+        onInspect={(record) => setInspectingPunch(record)}
+      />
+
+      {/* Modal: Detalle de Fichaje Inspeccionado en Tiempo Real */}
+      {inspectingPunch && (
+        <PunchDetailModal
+          record={inspectingPunch}
+          onClose={() => setInspectingPunch(null)}
         />
       )}
     </div>

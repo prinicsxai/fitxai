@@ -1,6 +1,7 @@
 import React from 'react';
-import { Menu, RefreshCw, Database } from 'lucide-react';
+import { Menu, RefreshCw, Database, Radio, WifiOff } from 'lucide-react';
 import { SidebarSection } from '../types';
+import { RealtimeConnectionStatus } from '../api/realtime';
 
 interface HeaderProps {
   activeSection: SidebarSection;
@@ -9,6 +10,8 @@ interface HeaderProps {
   isRefreshing: boolean;
   dbStatus: 'connected' | 'error' | 'checking';
   latencyMs?: number;
+  realtimeStatus?: RealtimeConnectionStatus;
+  onReconnectRealtime?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -18,6 +21,8 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   dbStatus,
   latencyMs,
+  realtimeStatus = 'disconnected',
+  onReconnectRealtime,
 }) => {
   const titles: Record<SidebarSection, { title: string; subtitle: string }> = {
     dashboard: { title: 'Dashboard General', subtitle: 'Métricas de jornada y control en tiempo real' },
@@ -56,14 +61,47 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Status Bar */}
       <div className="flex items-center space-x-3.5">
+        {/* Live SSE Stream Badge */}
+        <div 
+          onClick={realtimeStatus !== 'connected' ? onReconnectRealtime : undefined}
+          className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs transition cursor-default ${
+            realtimeStatus === 'connected'
+              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+              : realtimeStatus === 'reconnecting'
+              ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400 animate-pulse'
+              : 'bg-rose-500/10 border border-rose-500/30 text-rose-400 cursor-pointer hover:bg-rose-500/20'
+          }`}
+          title={realtimeStatus !== 'connected' ? 'Haz clic para reconectar el canal en vivo' : 'Canal en vivo activo'}
+        >
+          {realtimeStatus === 'connected' ? (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-semibold text-[11px] hidden sm:inline">En vivo</span>
+            </>
+          ) : realtimeStatus === 'reconnecting' ? (
+            <>
+              <Radio className="w-3.5 h-3.5 animate-spin" />
+              <span className="font-semibold text-[11px] hidden sm:inline">Reconectando...</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="w-3.5 h-3.5" />
+              <span className="font-semibold text-[11px] hidden sm:inline">Desconectado</span>
+            </>
+          )}
+        </div>
+
         {/* DB Connection Badge */}
-        <div className="hidden sm:flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
+        <div className="hidden md:flex items-center space-x-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
           <Database className="w-3.5 h-3.5 text-slate-400" />
           <span className={`w-2 h-2 rounded-full ${
             dbStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
           }`} />
           <span className="text-slate-300 font-medium">
-            PostgreSQL: {dbStatus === 'connected' ? `Online (${latencyMs || 1}ms)` : 'Conectando...'}
+            DB: {dbStatus === 'connected' ? `Online (${latencyMs || 1}ms)` : 'Conectando...'}
           </span>
         </div>
 

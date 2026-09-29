@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, dbPool } from '../db/pool';
 import { config } from '../config/env';
 import { PunchType, PunchStatus, IncidentSeverity, IncidentStatus } from '@fitxai/shared';
+import { realtimeService } from '../services/realtime.service';
 
 const punchSchema = z.object({
   type: z.union([
@@ -90,7 +91,17 @@ export async function registerPunch(req: Request, res: Response) {
 
     // 4. Verificaciones de actividad del usuario, empresa y empleado con bloqueo de fila
     const userStatusCheck = await client.query(
-      `SELECT u.status as user_status, c.is_active as company_active, e.is_active as employee_active
+      `SELECT 
+        u.status as user_status, 
+        c.is_active as company_active, 
+        c.name as company_name,
+        e.is_active as employee_active,
+        e.first_name,
+        e.last_name,
+        e.document_id,
+        e.employee_code,
+        e.department,
+        e.job_title
        FROM users u
        JOIN companies c ON c.id = u.company_id
        JOIN employees e ON e.id = $1 AND e.company_id = u.company_id
@@ -106,7 +117,8 @@ export async function registerPunch(req: Request, res: Response) {
       });
     }
 
-    const { user_status, company_active, employee_active } = userStatusCheck.rows[0];
+    const empInfo = userStatusCheck.rows[0];
+    const { user_status, company_active, employee_active } = empInfo;
     const user_active = user_status === 'ACTIVE';
 
     if (!company_active) {
@@ -278,6 +290,47 @@ export async function registerPunch(req: Request, res: Response) {
     );
 
     await client.query('COMMIT');
+
+    // 12. Emitir evento EN TIEMPO REAL exclusivamente a los administradores de la empresa correspondiente
+    try {
+      realtimeService.emitPunchEvent(user.companyId, {
+        type: 'NEW_PUNCH',
+        companyId: user.companyId,
+        timestamp: attendanceRecord.timestamp,
+        record: {
+          id: attendanceRecord.id,
+          employee_id: employeeId,
+          first_name: empInfo.first_name,
+          last_name: empInfo.last_name,
+          document_id: empInfo.document_id,
+          employee_code: empInfo.employee_code,
+          department: empInfo.department,
+          job_title: empInfo.job_title,
+          company_id: user.companyId,
+          company_name: empInfo.company_name,
+          type: attendanceRecord.type,
+          tipo: attendanceRecord.type === PunchType.CHECK_IN ? 'ENTRADA' : 'SALIDA',
+          timestamp: attendanceRecord.timestamp,
+          fecha: attendanceRecord.fecha,
+          hora: attendanceRecord.hora,
+          status: attendanceRecord.status,
+          latitude: attendanceRecord.latitude,
+          longitude: attendanceRecord.longitude,
+          accuracy: attendanceRecord.accuracy,
+          ip_origen: attendanceRecord.ip_address,
+          dispositivo: attendanceRecord.device_info,
+        },
+        notification: {
+          title: 'Nou fitxatge',
+          workerName: `${empInfo.first_name} ${empInfo.last_name}`,
+          punchType: attendanceRecord.type === PunchType.CHECK_IN ? 'Entrada' : 'Salida',
+          time: attendanceRecord.hora ? attendanceRecord.hora.substring(0, 5) : '--:--',
+          locationStatus: attendanceRecord.latitude && attendanceRecord.longitude ? 'Ubicació registrada' : 'Sense ubicació',
+        },
+      });
+    } catch (realtimeErr) {
+      console.warn('[REALTIME] Advertencia al emitir evento de fichaje:', realtimeErr);
+    }
 
     return res.status(201).json({
       success: true,

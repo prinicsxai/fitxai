@@ -29,6 +29,7 @@ import {
   getAdminDashboardStats, 
   getEmployeeAttendanceHistory 
 } from '../controllers/admin.controller';
+import { streamRealtimeEvents } from '../controllers/realtime.controller';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
 import { authRateLimiter } from '../middlewares/security.middleware';
 import { UserRole } from '@fitxai/shared';
@@ -85,3 +86,9 @@ apiRouter.get('/incidents/my-incidents', requireAuth, getMyIncidents);
 // ==========================================
 apiRouter.get('/admin/attendance', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminAttendance);
 apiRouter.get('/admin/stats', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminDashboardStats);
+
+// ==========================================
+// 8. EVENTOS EN TIEMPO REAL (SSE)
+// ==========================================
+apiRouter.get('/realtime/stream', streamRealtimeEvents);
+
