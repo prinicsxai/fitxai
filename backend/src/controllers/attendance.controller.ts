@@ -483,6 +483,7 @@ export async function getMyAttendanceHistory(req: Request, res: Response) {
     const records = await query<any>(
       `SELECT 
         ar.id,
+        ar.employee_id,
         ar.type,
         ar.timestamp,
         ar.status,

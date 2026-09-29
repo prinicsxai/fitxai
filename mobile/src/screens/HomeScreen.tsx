@@ -104,19 +104,38 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ user }) => {
         // Recargar el nuevo estado de la jornada
         await loadStatus();
       } else {
-        setErrorMessage(res.error || 'No se pudo guardar el fichaje en el servidor.');
+        setErrorMessage(formatUserFriendlyError(res.error));
       }
     } catch (err: any) {
       console.warn('[PUNCH_ERROR]', err);
-      if (err instanceof GpsError) {
-        setErrorMessage(err.message);
-      } else {
-        setErrorMessage('Error al obtener la ubicación: ' + (err.message || 'Error desconocido'));
-      }
+      setErrorMessage(formatUserFriendlyError(err));
     } finally {
       setLoading(false);
       setTimeout(() => setGpsPhase('IDLE'), 3000);
     }
+  };
+
+  const formatUserFriendlyError = (err: any): string => {
+    if (err instanceof GpsError) {
+      return err.message;
+    }
+    const raw = typeof err === 'string' ? err : (err?.message || err?.error || '');
+    if (raw.includes('conexión') || raw.includes('Failed to fetch') || raw.includes('Network') || raw.includes('ECONNREFUSED')) {
+      return 'No hay conexión con el servidor. Comprueba tu conexión a Internet y vuelve a intentarlo.';
+    }
+    if (raw.includes('Session has been revoked') || raw.includes('expired') || raw.includes('expirado') || raw.includes('Authorization token missing') || raw.includes('Token inválido')) {
+      return 'Tu sesión ha caducado. Vuelve a iniciar sesión para continuar.';
+    }
+    if (raw.includes('User account is not active') || raw.includes('inactiva') || raw.includes('no longer exists') || raw.includes('inactivo')) {
+      return 'Tu cuenta de trabajador se encuentra inactiva. Por favor, consulta con tu responsable.';
+    }
+    if (raw.includes('duplicado') || raw.includes('segundos') || raw.includes('simultáneo') || raw.includes('doble')) {
+      return 'Ya se ha registrado una pulsación reciente. Espera unos instantes antes de volver a pulsar.';
+    }
+    if (raw.includes('500') || raw.includes('Internal server error') || raw.includes('servidor')) {
+      return 'El servicio de fichaje no está disponible temporalmente. Inténtalo de nuevo en unos minutos.';
+    }
+    return raw || 'No se pudo completar el fichaje. Por favor, inténtalo de nuevo.';
   };
 
   const firstName = user?.firstName || user?.first_name || 'Trabajador';
