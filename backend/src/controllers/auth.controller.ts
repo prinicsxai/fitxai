@@ -55,9 +55,10 @@ export async function login(req: Request, res: Response) {
     // Consulta parametrizada segura con datos de usuario y empresa
     const users = await query<any>(
       `SELECT u.id, u.company_id, u.email, u.password_hash, u.role, u.status,
-              u.first_name, u.last_name, u.phone,
+              COALESCE(e.first_name, 'Usuario') as first_name, 
+              COALESCE(e.last_name, 'FITXAI') as last_name,
               c.name as company_name, c.is_active as company_active,
-              e.id as employee_id, e.employee_code, e.department, e.job_title, e.schedule
+              e.id as employee_id, e.employee_code, e.department, e.job_title
        FROM users u
        JOIN companies c ON c.id = u.company_id
        LEFT JOIN employees e ON e.user_id = u.id
@@ -134,7 +135,7 @@ export async function login(req: Request, res: Response) {
         email: user.email,
         firstName: user.first_name,
         lastName: user.last_name,
-        phone: user.phone,
+        phone: user.phone || null,
         role: user.role,
         companyId: user.company_id,
         companyName: user.company_name,
@@ -146,7 +147,7 @@ export async function login(req: Request, res: Response) {
               employeeCode: user.employee_code,
               department: user.department,
               jobTitle: user.job_title,
-              schedule: user.schedule,
+              schedule: null,
             }
           : null,
       },
