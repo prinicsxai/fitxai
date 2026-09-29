@@ -472,9 +472,9 @@ export async function registerCompany(req: Request, res: Response) {
 
     // Registrar sesión
     await query(
-      `INSERT INTO sessions (user_id, company_id, token_hash, ip_address, user_agent, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [newUser.id, newCompany.id, tokenHashStr, req.ip, req.headers['user-agent'] || 'Web Browser', expiresAt]
+      `INSERT INTO sessions (user_id, token_hash, ip_address, user_agent, expires_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newUser.id, tokenHashStr, req.ip, req.headers['user-agent'] || 'Web Browser', expiresAt]
     );
 
     // Auditoría
