@@ -441,12 +441,19 @@ export async function registerCompany(req: Request, res: Response) {
     // Crear admin con hash bcrypt
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     const userRes = await query<any>(
-      `INSERT INTO users (company_id, email, password_hash, first_name, last_name, phone, role, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ADMIN', 'ACTIVE')
-       RETURNING id, email, first_name, last_name, phone, role, status, created_at`,
-      [newCompany.id, adminEmail.toLowerCase().trim(), passwordHash, adminFirstName, adminLastName, adminPhone || null]
+      `INSERT INTO users (company_id, email, password_hash, role, status)
+       VALUES ($1, $2, $3, 'ADMIN', 'ACTIVE')
+       RETURNING id, email, role, status, created_at`,
+      [newCompany.id, adminEmail.toLowerCase().trim(), passwordHash]
     );
     const newUser = userRes[0];
+
+    // Crear perfil de empleado asociado al admin
+    await query(
+      `INSERT INTO employees (user_id, company_id, first_name, last_name, document_id, department, job_title)
+       VALUES ($1, $2, $3, $4, $5, 'Dirección', 'Administrador')`,
+      [newUser.id, newCompany.id, adminFirstName, adminLastName, cif]
+    );
 
     // Generar Token JWT
     const token = jwt.sign(
@@ -484,9 +491,9 @@ export async function registerCompany(req: Request, res: Response) {
       user: {
         id: newUser.id,
         email: newUser.email,
-        firstName: newUser.first_name,
-        lastName: newUser.last_name,
-        phone: newUser.phone,
+        firstName: adminFirstName,
+        lastName: adminLastName,
+        phone: adminPhone || null,
         role: newUser.role,
         companyId: newCompany.id,
         companyName: newCompany.name,
