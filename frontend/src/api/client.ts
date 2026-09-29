@@ -48,3 +48,36 @@ export async function apiRequest<T = any>(
     return { success: false, error: err.message || 'Error de conexión con el servidor' };
   }
 }
+
+export async function downloadFile(endpoint: string, defaultFilename: string) {
+  const token = getStoredToken();
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error('Error al descargar archivo');
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = defaultFilename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function openPdfView(endpoint: string) {
+  const token = getStoredToken();
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  const html = await res.text();
+  const printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }
+}
+

@@ -21,7 +21,6 @@ import {
   getMyAttendanceStatus, 
   getMyAttendanceHistory, 
   getAttendanceById,
-  createWorkerIncident, 
   getMyIncidents 
 } from '../controllers/attendance.controller';
 import { 
@@ -30,6 +29,25 @@ import {
   getEmployeeAttendanceHistory 
 } from '../controllers/admin.controller';
 import { streamRealtimeEvents } from '../controllers/realtime.controller';
+import { 
+  getSchedules, 
+  createSchedule, 
+  updateSchedule, 
+  deleteSchedule 
+} from '../controllers/schedule.controller';
+import { 
+  getIncidents, 
+  createIncident, 
+  reviewIncident, 
+  approveIncident, 
+  rejectIncident 
+} from '../controllers/incident.controller';
+import { 
+  getDetailedReport, 
+  exportReportCsv, 
+  exportReportExcel, 
+  exportReportPdf 
+} from '../controllers/report.controller';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
 import { authRateLimiter } from '../middlewares/security.middleware';
 import { UserRole } from '@fitxai/shared';
@@ -72,23 +90,46 @@ apiRouter.put('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), update
 apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), deleteEmployee);
 
 // ==========================================
-// 6. FICHAJES E INCIDENCIAS (TRABAJADOR)
+// 6. FICHAJES (TRABAJADOR)
 // ==========================================
 apiRouter.post('/attendance/punch', requireAuth, registerPunch);
 apiRouter.get('/attendance/my-status', requireAuth, getMyAttendanceStatus);
 apiRouter.get('/attendance/my-punches', requireAuth, getMyAttendanceHistory);
 apiRouter.get('/attendance/:id', requireAuth, getAttendanceById);
-apiRouter.post('/incidents', requireAuth, createWorkerIncident);
-apiRouter.get('/incidents/my-incidents', requireAuth, getMyIncidents);
 
 // ==========================================
-// 7. PANEL ADMINISTRADOR
+// 7. HORARIOS DE TRABAJO (SCHEDULES)
+// ==========================================
+apiRouter.get('/schedules', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getSchedules);
+apiRouter.post('/schedules', requireAuth, requireRole(UserRole.ADMIN), createSchedule);
+apiRouter.put('/schedules/:id', requireAuth, requireRole(UserRole.ADMIN), updateSchedule);
+apiRouter.delete('/schedules/:id', requireAuth, requireRole(UserRole.ADMIN), deleteSchedule);
+
+// ==========================================
+// 8. GESTIÓN INTEGRAL DE INCIDENCIAS
+// ==========================================
+apiRouter.get('/incidents', requireAuth, getIncidents);
+apiRouter.get('/incidents/my-incidents', requireAuth, getMyIncidents);
+apiRouter.post('/incidents', requireAuth, createIncident);
+apiRouter.post('/incidents/:id/review', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), reviewIncident);
+apiRouter.post('/incidents/:id/approve', requireAuth, requireRole(UserRole.ADMIN), approveIncident);
+apiRouter.post('/incidents/:id/reject', requireAuth, requireRole(UserRole.ADMIN), rejectIncident);
+
+// ==========================================
+// 9. INFORMES Y EXPORTACIONES EMPRESARIALES
+// ==========================================
+apiRouter.get('/reports', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getDetailedReport);
+apiRouter.get('/reports/export/csv', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), exportReportCsv);
+apiRouter.get('/reports/export/excel', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), exportReportExcel);
+apiRouter.get('/reports/export/pdf', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), exportReportPdf);
+
+// ==========================================
+// 10. PANEL ADMINISTRADOR (DASHBOARD & STATS)
 // ==========================================
 apiRouter.get('/admin/attendance', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminAttendance);
 apiRouter.get('/admin/stats', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminDashboardStats);
 
 // ==========================================
-// 8. EVENTOS EN TIEMPO REAL (SSE)
+// 11. EVENTOS EN TIEMPO REAL (SSE)
 // ==========================================
 apiRouter.get('/realtime/stream', streamRealtimeEvents);
-

@@ -161,18 +161,47 @@ export interface Session {
   revokedAt?: string;
 }
 
+export enum IncidentType {
+  FORGOT_PUNCH = 'FORGOT_PUNCH',
+  PUNCH_ERROR = 'PUNCH_ERROR',
+  GPS_ISSUE = 'GPS_ISSUE',
+  CONNECTION_ISSUE = 'CONNECTION_ISSUE',
+  OTHER = 'OTHER',
+  LOW_GPS_ACCURACY = 'LOW_GPS_ACCURACY',
+}
+
 export interface Incident {
   id: string;
   companyId: string;
   employeeId: string;
   attendanceRecordId?: string;
-  type: string; // e.g., 'LOCATION_ACCURACY_LOW', 'OUT_OF_GEOFENCE', 'MANUAL_EDIT'
+  type: string; // e.g., 'FORGOT_PUNCH', 'PUNCH_ERROR', 'GPS_ISSUE', 'CONNECTION_ISSUE', 'OTHER', 'LOW_GPS_ACCURACY'
   severity: IncidentSeverity;
   description: string;
   status: IncidentStatus;
+  adminComment?: string;
+  requestedTime?: string;
+  requestedPunchType?: string;
   resolvedById?: string;
   resolvedAt?: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface WorkSchedule {
+  id: string;
+  companyId: string;
+  employeeId?: string;
+  name: string;
+  startTime: string; // HH:mm
+  endTime: string;   // HH:mm
+  workDays: string;  // e.g., 'L,M,X,J,V'
+  breakMinutes: number;
+  breakStart?: string;
+  breakEnd?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AuditLog {
