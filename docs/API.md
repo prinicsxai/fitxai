@@ -5,36 +5,17 @@ Base URL: `http://localhost:4000/api/v1`
 ---
 
 ## 1. Verificación de Salud
-
 ### `GET /health`
 Verifica la disponibilidad del servidor y la conexión a la base de datos PostgreSQL.
-- **Autenticación**: No requerida.
-- **Respuesta 200 OK**:
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-09-29T20:53:00.000Z",
-  "services": {
-    "database": {
-      "status": "connected",
-      "latencyMs": 3
-    },
-    "server": {
-      "uptimeSeconds": 142,
-      "environment": "development",
-      "version": "1.0.0"
-    }
-  }
-}
-```
+- **Autenticación**: Pública.
 
 ---
 
-## 2. Autenticación
+## 2. Autenticación y Sesiones Seguras
 
 ### `POST /auth/login`
-Inicio de sesión con rate-limiting reforzado contra fuerza bruta.
-- **Autenticación**: No requerida.
+Inicio de sesión con rate-limiting y emisión de JWT con ID único de sesión (`jti`).
+- **Autenticación**: Pública (Protegida por rate limiting anti-fuerza bruta).
 - **Body**:
 ```json
 {
@@ -43,21 +24,79 @@ Inicio de sesión con rate-limiting reforzado contra fuerza bruta.
   "platform": "android"
 }
 ```
+
+### `POST /auth/logout`
+Revoca la sesión activa en base de datos.
+- **Autenticación**: Bearer JWT.
+
+### `POST /auth/forgot-password`
+Genera un token seguro con expiración de 1 hora para recuperación de clave.
+- **Autenticación**: Pública.
+- **Body**:
+```json
+{
+  "email": "carlos.garcia@techlogistics.es"
+}
+```
+
+### `POST /auth/reset-password`
+Restablece la contraseña validando el token criptográfico y revoca sesiones anteriores.
+- **Autenticación**: Pública.
+- **Body**:
+```json
+{
+  "token": "token-recibido",
+  "newPassword": "NuevaPassword2026!"
+}
+```
+
+### `POST /auth/change-password`
+Permite a un usuario autenticado cambiar su contraseña actual.
+- **Autenticación**: Bearer JWT.
+- **Body**:
+```json
+{
+  "currentPassword": "Admin1234!",
+  "newPassword": "NuevaPassword2026!"
+}
+```
+
+---
+
+## 3. Usuarios
+
+### `GET /users/me`
+Obtiene los datos completos del usuario autenticado y su perfil laboral de empleado (si aplica).
+- **Autenticación**: Bearer JWT.
 - **Respuesta 200 OK**:
 ```json
 {
   "success": true,
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
-    "id": "u2222222-2222-2222-2222-222222222222",
+  "data": {
+    "id": "u-uuid",
     "email": "carlos.garcia@techlogistics.es",
+    "firstName": "Carlos",
+    "lastName": "García Moreno",
+    "phone": "+34 600 000 000",
     "role": "EMPLOYEE",
-    "companyId": "c1111111-1111-1111-1111-111111111111",
+    "status": "ACTIVE",
+    "company": {
+      "id": "c-uuid",
+      "name": "Tech Logistics Iberia S.L.",
+      "cif": "B-12345678",
+      "timezone": "Europe/Madrid"
+    },
+    "createdAt": "2026-09-29T20:49:40.000Z",
+    "lastLoginAt": "2026-09-29T22:55:00.000Z",
     "employeeProfile": {
-      "id": "e2222222-2222-2222-2222-222222222222",
-      "firstName": "Carlos",
-      "lastName": "García Moreno",
-      "employeeCode": "EMP-0042"
+      "id": "e-uuid",
+      "documentId": "48765432X",
+      "employeeCode": "EMP-0042",
+      "department": "Operaciones",
+      "jobTitle": "Técnico de Campo",
+      "schedule": "Lunes a Viernes: 08:00 - 16:30",
+      "hireDate": "2026-09-29T20:49:40.000Z",
+      "isActive": true
     }
   }
 }
@@ -65,53 +104,73 @@ Inicio de sesión con rate-limiting reforzado contra fuerza bruta.
 
 ---
 
-## 3. Fichajes de Trabajador
+## 4. Gestión de Empresas (Multi-Tenant)
 
-### `POST /attendance/punch`
-Registra un fichaje puntual (Entrada o Salida) con las coordenadas capturadas en ese instante exacto.
-- **Autenticación**: Bearer JWT (Rol `EMPLOYEE` o superior).
+### `POST /companies`
+Crea una nueva empresa u organización en la plataforma.
+- **Autenticación**: Pública o SuperAdmin.
 - **Body**:
 ```json
 {
-  "type": "CHECK_IN",
-  "latitude": 40.4530541,
-  "longitude": -3.6883445,
-  "accuracy": 8.5,
-  "altitude": 667.2,
-  "notes": "Inicio de turno"
+  "name": "Logística Norte S.A.",
+  "cif": "A-88776655",
+  "contactEmail": "contacto@logisticanorte.es",
+  "contactPhone": "+34 944 000 111",
+  "timezone": "Europe/Madrid"
 }
 ```
-- **Respuesta 201 Created**:
-```json
-{
-  "success": true,
-  "message": "Entrada registrada con éxito",
-  "record": {
-    "id": "att-uuid-...",
-    "employeeId": "e2222222-2222-2222-2222-222222222222",
-    "companyId": "c1111111-1111-1111-1111-111111111111",
-    "type": "CHECK_IN",
-    "timestamp": "2026-09-29T20:55:00.123Z",
-    "status": "VERIFIED",
-    "location": {
-      "latitude": 40.4530541,
-      "longitude": -3.6883445,
-      "accuracy": 8.5,
-      "capturedAt": "2026-09-29T20:55:00.123Z"
-    }
-  }
-}
-```
+
+### `GET /companies`
+Devuelve los datos de la empresa correspondiente al administrador autenticado.
+- **Autenticación**: Bearer JWT (Rol `ADMIN` o `MANAGER`).
 
 ---
 
-## 4. Panel de Administración
+## 5. Gestión de Trabajadores (Employees)
 
-### `GET /admin/attendance`
-Consulta los fichajes de la empresa con todos los datos y coordenadas asociadas.
+### `GET /employees`
+Lista los trabajadores pertenecientes de forma exclusiva a la empresa del administrador.
 - **Autenticación**: Bearer JWT (Rol `ADMIN` o `MANAGER`).
-- **Query Params**: `limit` (default 50), `offset` (default 0).
+- **Bloqueo a Trabajadores**: Si un `EMPLOYEE` intenta consultar este endpoint, recibe `403 Forbidden`.
 
-### `GET /admin/stats`
-Obtiene los contadores consolidados de la jornada actual (fichajes hoy, empleados activos, incidencias).
-- **Autenticación**: Bearer JWT (Rol `ADMIN` o `MANAGER`).
+### `GET /employees/:id`
+Consulta un trabajador por su ID.
+- **Autenticación**: Bearer JWT.
+- **Regla de Permisos**:
+  - Si es `EMPLOYEE`: sólo puede consultar su propio ID (`req.user.employeeId === id`). Cualquier otro ID devuelve `403 Forbidden`.
+  - Si es `ADMIN`: sólo puede consultar trabajadores de su misma empresa. Empleados de otra empresa devuelven `404 Not Found`.
+
+### `POST /employees`
+Crea un nuevo trabajador en la empresa del administrador.
+- **Autenticación**: Bearer JWT (Rol `ADMIN`).
+- **Body**:
+```json
+{
+  "firstName": "Ana",
+  "lastName": "Martínez Ruiz",
+  "email": "ana.martinez@techlogistics.es",
+  "password": "PasswordSegura123!",
+  "phone": "+34 655 123 456",
+  "documentId": "50123456Y",
+  "employeeCode": "EMP-0050",
+  "department": "Distribución",
+  "jobTitle": "Repartidora",
+  "schedule": "L-V 06:00 - 14:00"
+}
+```
+
+### `PUT /employees/:id`
+Edita la ficha del trabajador (datos de contacto, horario, puesto, departamento, estado activo).
+- **Autenticación**: Bearer JWT (Rol `ADMIN`).
+
+### `DELETE /employees/:id`
+Desactiva a un trabajador y revoca inmediatamente todas sus sesiones activas.
+- **Autenticación**: Bearer JWT (Rol `ADMIN`).
+
+---
+
+## 6. Fichajes de Trabajador
+
+### `POST /attendance/punch`
+Registra un fichaje puntual (Entrada o Salida) con adquisición única de GPS puntual.
+- **Autenticación**: Bearer JWT (Rol `EMPLOYEE` o superior).

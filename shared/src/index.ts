@@ -70,6 +70,9 @@ export interface User {
   id: string;
   companyId: string;
   email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
   role: UserRole;
   status: UserStatus;
   lastLoginAt?: string;
@@ -87,6 +90,7 @@ export interface Employee {
   employeeCode?: string;
   department?: string;
   jobTitle?: string;
+  schedule?: string;
   hireDate: string;
   isActive: boolean;
   createdAt: string;
@@ -248,6 +252,9 @@ export interface AuthResponse {
   user: {
     id: string;
     email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
     role: UserRole;
     companyId: string;
     employeeProfile?: {
@@ -255,8 +262,58 @@ export interface AuthResponse {
       firstName: string;
       lastName: string;
       employeeCode?: string;
-    };
+      department?: string;
+      jobTitle?: string;
+      schedule?: string;
+    } | null;
   };
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface CreateCompanyRequest {
+  name: string;
+  cif: string;
+  contactEmail: string;
+  contactPhone?: string;
+  address?: string;
+  timezone?: string;
+}
+
+export interface CreateEmployeeRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password?: string; // Si no se provee, se genera provisional o se envía invitación
+  phone?: string;
+  documentId: string;
+  employeeCode?: string;
+  department?: string;
+  jobTitle?: string;
+  schedule?: string;
+  hireDate?: string;
+}
+
+export interface UpdateEmployeeRequest {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  department?: string;
+  jobTitle?: string;
+  schedule?: string;
+  isActive?: boolean;
 }
 
 export interface HealthCheckResponse {
@@ -274,3 +331,4 @@ export interface HealthCheckResponse {
     };
   };
 }
+

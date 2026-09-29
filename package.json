@@ -15,9 +15,10 @@
     "dev:backend": "npm run dev --workspace=@fitxai/backend",
     "dev:frontend": "npm run dev --workspace=@fitxai/frontend",
     "dev:mobile": "npm run dev --workspace=@fitxai/mobile",
+    "setup:admin": "npm run setup:admin --workspace=@fitxai/backend",
     "start:backend": "npm run start --workspace=@fitxai/backend",
     "start:frontend": "npm run preview --workspace=@fitxai/frontend",
-    "test": "npm run test --workspace=@fitxai/backend",
+    "test": "node --test tests/*.test.js",
     "db:migrate": "psql -d fitxai_dev -f database/migrations/001_initial_schema.sql",
     "db:seed": "psql -d fitxai_dev -f database/seeds/initial_seed.sql"
   },

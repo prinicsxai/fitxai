@@ -47,13 +47,29 @@ psql -d fitxai_dev -f database/migrations/001_initial_schema.sql
 psql -d fitxai_dev -f database/seeds/initial_seed.sql
 ```
 
-### 3. Instalar Dependencias
+### 3. Instalar Dependencias y Compilar Tipos
 ```bash
 npm install
 npm run build:shared
 ```
 
-### 4. Ejecución en Desarrollo
+### 4. Crear el Administrador Inicial (Sin credenciales en código)
+Puedes ejecutar el asistente interactivo en terminal:
+```bash
+npm run setup:admin
+```
+O de forma desatendida mediante variables de entorno:
+```bash
+INIT_COMPANY_NAME="Mi Empresa S.L." \
+INIT_COMPANY_CIF="B-12345678" \
+INIT_ADMIN_EMAIL="admin@miempresa.com" \
+INIT_ADMIN_PASSWORD="MiPasswordSegura123!" \
+INIT_ADMIN_FIRST_NAME="Laura" \
+INIT_ADMIN_LAST_NAME="García" \
+npm run setup:admin
+```
+
+### 5. Ejecución en Desarrollo
 - **Backend API**:
   ```bash
   npm run dev:backend
