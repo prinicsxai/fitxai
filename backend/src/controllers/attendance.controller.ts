@@ -740,3 +740,88 @@ export async function getAttendanceById(req: Request, res: Response) {
   }
 }
 
+/**
+ * PUT /attendance/:id/correct
+ * Corrección de un fichaje por parte del administrador con registro inmutable de auditoría
+ */
+export async function correctAttendanceRecord(req: Request, res: Response) {
+  try {
+    const user = req.user!;
+    const { id } = req.params;
+    const { timestamp, type, status, reason, notes } = req.body;
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+      return res.status(400).json({
+        success: false,
+        error: 'Es obligatorio indicar un motivo justificativo detallado (mínimo 5 caracteres) para corregir un fichaje.',
+      });
+    }
+
+    // 1. Verificar existencia y pertenencia a la empresa
+    const existing = await query<any>(
+      `SELECT * FROM attendance_records WHERE id = $1 AND company_id = $2`,
+      [id, user.companyId]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ success: false, error: 'Fichaje no encontrado en tu empresa' });
+    }
+
+    const current = existing[0];
+
+    // 2. Construir campos a actualizar
+    const newTimestamp = timestamp ? new Date(timestamp) : current.timestamp;
+    const newType = type || current.type;
+    const newStatus = status || current.status;
+    const newNotes = notes !== undefined ? notes : current.notes;
+    const fullNotes = `${newNotes ? newNotes + ' | ' : ''}Corregido por admin: ${reason.trim()}`;
+
+    const updateRes = await query<any>(
+      `UPDATE attendance_records
+       SET timestamp = $1, type = $2, status = $3, notes = $4, updated_at = NOW()
+       WHERE id = $5 AND company_id = $6
+       RETURNING *`,
+      [newTimestamp, newType, newStatus, fullNotes, id, user.companyId]
+    );
+
+    const updated = updateRes[0];
+
+    // 3. Registro inmutable de auditoría
+    await query(
+      `INSERT INTO audit_logs (company_id, user_id, action, entity_type, entity_id, ip_address, metadata)
+       VALUES ($1, $2, 'PUNCH_CORRECTED', 'attendance_records', $3, $4, $5)`,
+      [
+        user.companyId,
+        user.userId,
+        id,
+        req.ip,
+        JSON.stringify({
+          before: {
+            timestamp: current.timestamp,
+            type: current.type,
+            status: current.status,
+            notes: current.notes,
+          },
+          after: {
+            timestamp: updated.timestamp,
+            type: updated.type,
+            status: updated.status,
+            notes: updated.notes,
+          },
+          reason: reason.trim(),
+        }),
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Fichaje corregido exitosamente y registrado en auditoría',
+      data: updated,
+    });
+  } catch (error: any) {
+    console.error('Error correcting attendance record:', error);
+    return res.status(500).json({ success: false, error: 'Error al corregir el fichaje' });
+  }
+}
+
+

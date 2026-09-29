@@ -8,7 +8,12 @@ import {
   changePassword 
 } from '../controllers/auth.controller';
 import { getMe } from '../controllers/user.controller';
-import { createCompany, getCompanies } from '../controllers/company.controller';
+import { 
+  createCompany, 
+  getCompanies, 
+  getCompanySettings, 
+  updateCompanySettings 
+} from '../controllers/company.controller';
 import { 
   getEmployees, 
   getEmployeeById, 
@@ -21,7 +26,8 @@ import {
   getMyAttendanceStatus, 
   getMyAttendanceHistory, 
   getAttendanceById,
-  getMyIncidents 
+  getMyIncidents,
+  correctAttendanceRecord 
 } from '../controllers/attendance.controller';
 import { 
   getAdminAttendance, 
@@ -48,6 +54,7 @@ import {
   exportReportExcel, 
   exportReportPdf 
 } from '../controllers/report.controller';
+import { getAuditLogs } from '../controllers/audit.controller';
 import { requireAuth, requireRole } from '../middlewares/auth.middleware';
 import { authRateLimiter } from '../middlewares/security.middleware';
 import { UserRole } from '@fitxai/shared';
@@ -74,10 +81,12 @@ apiRouter.post('/auth/change-password', requireAuth, changePassword);
 apiRouter.get('/users/me', requireAuth, getMe);
 
 // ==========================================
-// 4. EMPRESAS (MULTI-TENANT)
+// 4. EMPRESAS Y CONFIGURACIÓN (MULTI-TENANT)
 // ==========================================
 apiRouter.post('/companies', createCompany);
 apiRouter.get('/companies', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getCompanies);
+apiRouter.get('/companies/settings', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getCompanySettings);
+apiRouter.put('/companies/settings', requireAuth, requireRole(UserRole.ADMIN), updateCompanySettings);
 
 // ==========================================
 // 5. TRABAJADORES (EMPLOYEES)
@@ -90,12 +99,13 @@ apiRouter.put('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), update
 apiRouter.delete('/employees/:id', requireAuth, requireRole(UserRole.ADMIN), deleteEmployee);
 
 // ==========================================
-// 6. FICHAJES (TRABAJADOR)
+// 6. FICHAJES (TRABAJADOR Y AUDITORÍA)
 // ==========================================
 apiRouter.post('/attendance/punch', requireAuth, registerPunch);
 apiRouter.get('/attendance/my-status', requireAuth, getMyAttendanceStatus);
 apiRouter.get('/attendance/my-punches', requireAuth, getMyAttendanceHistory);
 apiRouter.get('/attendance/:id', requireAuth, getAttendanceById);
+apiRouter.put('/attendance/:id/correct', requireAuth, requireRole(UserRole.ADMIN), correctAttendanceRecord);
 
 // ==========================================
 // 7. HORARIOS DE TRABAJO (SCHEDULES)
@@ -124,12 +134,17 @@ apiRouter.get('/reports/export/excel', requireAuth, requireRole(UserRole.ADMIN, 
 apiRouter.get('/reports/export/pdf', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), exportReportPdf);
 
 // ==========================================
-// 10. PANEL ADMINISTRADOR (DASHBOARD & STATS)
+// 10. AUDITORÍA INMUTABLE DEL SISTEMA
+// ==========================================
+apiRouter.get('/audit/logs', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAuditLogs);
+
+// ==========================================
+// 11. PANEL ADMINISTRADOR (DASHBOARD & STATS)
 // ==========================================
 apiRouter.get('/admin/attendance', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminAttendance);
 apiRouter.get('/admin/stats', requireAuth, requireRole(UserRole.ADMIN, UserRole.MANAGER), getAdminDashboardStats);
 
 // ==========================================
-// 11. EVENTOS EN TIEMPO REAL (SSE)
+// 12. EVENTOS EN TIEMPO REAL (SSE)
 // ==========================================
 apiRouter.get('/realtime/stream', streamRealtimeEvents);

@@ -94,3 +94,116 @@ export async function getCompanies(req: Request, res: Response) {
     return res.status(500).json({ success: false, error: 'Error interno del servidor' });
   }
 }
+
+/**
+ * GET /companies/settings
+ * Obtiene la configuración de control horario y geolocalización puntual de la empresa
+ */
+export async function getCompanySettings(req: Request, res: Response) {
+  try {
+    const user = req.user!;
+    const rows = await query<any>(
+      `SELECT key, value, description FROM settings WHERE company_id = $1`,
+      [user.companyId]
+    );
+
+    const settingsMap: Record<string, string> = {
+      maxGpsAccuracyMeters: '150',
+      requireGps: 'true',
+      timezone: 'Europe/Madrid',
+    };
+
+    rows.forEach(r => {
+      settingsMap[r.key] = r.value;
+    });
+
+    return res.json({
+      success: true,
+      data: settingsMap,
+    });
+  } catch (error: any) {
+    console.error('Error fetching company settings:', error);
+    return res.status(500).json({ success: false, error: 'Error al obtener la configuración' });
+  }
+}
+
+/**
+ * PUT /companies/settings
+ * Actualiza la configuración de la empresa con registro inmutable en audit_logs
+ */
+export async function updateCompanySettings(req: Request, res: Response) {
+  try {
+    const user = req.user!;
+    const { maxGpsAccuracyMeters, requireGps, timezone } = req.body;
+
+    const beforeRows = await query<any>(
+      `SELECT key, value FROM settings WHERE company_id = $1`,
+      [user.companyId]
+    );
+    const beforeState: Record<string, string> = {};
+    beforeRows.forEach(r => { beforeState[r.key] = r.value; });
+
+    const updates: Array<{ key: string; value: string; desc: string }> = [];
+
+    if (maxGpsAccuracyMeters !== undefined) {
+      updates.push({
+        key: 'maxGpsAccuracyMeters',
+        value: String(maxGpsAccuracyMeters),
+        desc: 'Umbral máximo en metros de precisión GPS puntual admisible',
+      });
+    }
+
+    if (requireGps !== undefined) {
+      updates.push({
+        key: 'requireGps',
+        value: String(requireGps),
+        desc: 'Exigir obligatoriamente captura GPS puntual al pulsar Fichar',
+      });
+    }
+
+    if (timezone !== undefined) {
+      updates.push({
+        key: 'timezone',
+        value: String(timezone),
+        desc: 'Zona horaria oficial de la empresa',
+      });
+      await query(`UPDATE companies SET timezone = $1, updated_at = NOW() WHERE id = $2`, [timezone, user.companyId]);
+    }
+
+    for (const item of updates) {
+      await query(
+        `INSERT INTO settings (company_id, key, value, description, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (company_id, key)
+         DO UPDATE SET value = EXCLUDED.value, description = EXCLUDED.description, updated_at = NOW()`,
+        [user.companyId, item.key, item.value, item.desc]
+      );
+    }
+
+    // Registro inmutable de auditoría
+    await query(
+      `INSERT INTO audit_logs (company_id, user_id, action, entity_type, entity_id, ip_address, metadata)
+       VALUES ($1, $2, 'SETTINGS_UPDATED', 'settings', $1, $3, $4)`,
+      [
+        user.companyId,
+        user.userId,
+        req.ip,
+        JSON.stringify({
+          before: beforeState,
+          after: { maxGpsAccuracyMeters, requireGps, timezone },
+          updatedBy: user.email,
+        }),
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: 'Configuración actualizada exitosamente y registrada en auditoría',
+      data: { maxGpsAccuracyMeters, requireGps, timezone },
+    });
+  } catch (error: any) {
+    console.error('Error updating company settings:', error);
+    return res.status(500).json({ success: false, error: 'Error al actualizar configuración' });
+  }
+}
+

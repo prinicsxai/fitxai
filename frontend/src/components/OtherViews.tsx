@@ -880,25 +880,63 @@ export const ReportsView: React.FC<{ stats: DashboardStats }> = () => {
 export const AuditView: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionFilter, setActionFilter] = useState('ALL');
+
+  const fetchAudit = async () => {
+    setLoading(true);
+    const queryStr = actionFilter !== 'ALL' ? `?action=${actionFilter}&limit=100` : '?limit=100';
+    const res = await apiRequest(`/audit/logs${queryStr}`);
+    if (res.success && res.data) {
+      setLogs(res.data);
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    // Carga de logs reales o eventos auditados del sistema
-    const fetchAudit = async () => {
-      setLoading(true);
-      const res = await apiRequest('/admin/attendance?limit=20');
-      if (res.success && res.data) {
-        setLogs(res.data);
-      }
-      setLoading(false);
-    };
     fetchAudit();
-  }, []);
+  }, [actionFilter]);
+
+  const getActionBadge = (action: string) => {
+    if (action.includes('LOGIN')) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">LOGIN</span>;
+    if (action.includes('LOGOUT')) return <span className="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded font-mono font-bold text-[10px]">LOGOUT</span>;
+    if (action.includes('PUNCH_CORRECTED')) return <span className="bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">CORRECCIÓN</span>;
+    if (action.includes('PUNCH')) return <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">FICHAJE</span>;
+    if (action.includes('DEACTIVATED')) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">BAJA</span>;
+    if (action.includes('CREATED')) return <span className="bg-teal-500/10 text-teal-400 border border-teal-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">CREACIÓN</span>;
+    if (action.includes('APPROVED')) return <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">APROBACIÓN</span>;
+    if (action.includes('REJECTED')) return <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">RECHAZO</span>;
+    if (action.includes('SETTINGS')) return <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded font-mono font-bold text-[10px]">CONFIG</span>;
+    return <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono text-[10px]">{action}</span>;
+  };
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-base font-bold text-slate-100">Registro Inmutable de Auditoría</h2>
-        <p className="text-xs text-slate-400">Trazabilidad de seguridad para inspecciones laborales y cumplimiento legal estricto</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-bold text-slate-100">Registro Inmutable de Auditoría</h2>
+          <p className="text-xs text-slate-400">Trazabilidad de seguridad para inspecciones laborales y cumplimiento legal estricto</p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Filter className="w-3.5 h-3.5 text-slate-400" />
+          <select
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
+          >
+            <option value="ALL">Todas las Acciones</option>
+            <option value="USER_LOGIN">Inicios de Sesión (Login)</option>
+            <option value="USER_LOGOUT">Cierres de Sesión (Logout)</option>
+            <option value="EMPLOYEE_CREATED">Creación de Trabajador</option>
+            <option value="EMPLOYEE_UPDATED">Edición de Trabajador</option>
+            <option value="EMPLOYEE_DEACTIVATED">Desactivación / Baja</option>
+            <option value="PUNCH_CHECK_IN">Fichajes de Entrada</option>
+            <option value="PUNCH_CHECK_OUT">Fichajes de Salida</option>
+            <option value="PUNCH_CORRECTED">Correcciones de Fichajes</option>
+            <option value="INCIDENT_APPROVED">Aprobación de Incidencias</option>
+            <option value="INCIDENT_REJECTED">Rechazo de Incidencias</option>
+            <option value="SETTINGS_UPDATED">Cambios de Configuración</option>
+          </select>
+        </div>
       </div>
 
       <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
@@ -906,25 +944,48 @@ export const AuditView: React.FC = () => {
           <thead className="bg-slate-900/60 uppercase text-[10px] text-slate-400 font-semibold border-b border-slate-800">
             <tr>
               <th className="px-5 py-3">Acción Registrada</th>
-              <th className="px-5 py-3">Trabajador / Entidad</th>
-              <th className="px-5 py-3">Tipo Fichaje</th>
+              <th className="px-5 py-3">Usuario Actor</th>
+              <th className="px-5 py-3">Entidad / ID</th>
+              <th className="px-5 py-3">Detalle / Modificaciones</th>
               <th className="px-5 py-3">Fecha y Hora Servidor</th>
-              <th className="px-5 py-3">Precisión Auditada</th>
+              <th className="px-5 py-3 text-right">Dirección IP</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
             {loading ? (
-              <tr><td colSpan={5} className="p-6 text-center text-slate-500">Cargando eventos de auditoría...</td></tr>
+              <tr><td colSpan={6} className="p-6 text-center text-slate-500 font-sans">Cargando eventos de auditoría...</td></tr>
             ) : logs.length === 0 ? (
-              <tr><td colSpan={5} className="p-6 text-center text-slate-500">No hay registros de auditoría aún.</td></tr>
+              <tr><td colSpan={6} className="p-6 text-center text-slate-500 font-sans">No hay eventos registrados en este filtro.</td></tr>
             ) : (
               logs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-900/40">
-                  <td className="px-5 py-3 font-semibold text-emerald-400">PUNCH_RECORDED</td>
-                  <td className="px-5 py-3 text-slate-300 font-sans">{log.first_name} {log.last_name}</td>
-                  <td className="px-5 py-3 text-slate-400">{log.type}</td>
-                  <td className="px-5 py-3 text-slate-300">{new Date(log.timestamp).toLocaleString('es-ES')}</td>
-                  <td className="px-5 py-3 text-slate-500">{log.accuracy ? `±${Math.round(log.accuracy)}m` : 'Regularizado'}</td>
+                <tr key={log.id} className="hover:bg-slate-900/40 transition">
+                  <td className="px-5 py-3 font-semibold">
+                    {getActionBadge(log.action)}
+                  </td>
+                  <td className="px-5 py-3 text-slate-300 font-sans">
+                    <div>{log.user_first_name ? `${log.user_first_name} ${log.user_last_name}` : 'Sistema'}</div>
+                    <div className="text-[10px] text-slate-500 font-mono">{log.user_email || '-'}</div>
+                  </td>
+                  <td className="px-5 py-3 text-slate-400 text-[10px]">
+                    <span className="text-slate-300 font-semibold">{log.entity_type}</span>
+                    {log.entity_id && <div className="text-slate-500">{log.entity_id.slice(0, 8)}...</div>}
+                  </td>
+                  <td className="px-5 py-3 text-slate-400 font-sans text-[11px] max-w-xs truncate">
+                    {log.metadata ? (
+                      <span title={JSON.stringify(log.metadata, null, 2)}>
+                        {log.metadata.reason ? `Motivo: ${log.metadata.reason}` :
+                         log.metadata.description ? log.metadata.description :
+                         log.metadata.email ? `Email: ${log.metadata.email}` :
+                         JSON.stringify(log.metadata).slice(0, 45)}
+                      </span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-5 py-3 text-slate-300 whitespace-nowrap">
+                    {new Date(log.created_at).toLocaleString('es-ES')}
+                  </td>
+                  <td className="px-5 py-3 text-slate-500 text-right whitespace-nowrap">
+                    {log.ip_address || '127.0.0.1'}
+                  </td>
                 </tr>
               ))
             )}
@@ -943,19 +1004,55 @@ export const AuditView: React.FC = () => {
 export const SettingsView: React.FC = () => {
   const [gpsThreshold, setGpsThreshold] = useState('150');
   const [requireGps, setRequireGps] = useState(true);
+  const [timezone, setTimezone] = useState('Europe/Madrid');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchSettings = async () => {
+      setLoading(true);
+      const res = await apiRequest('/companies/settings');
+      if (res.success && res.data) {
+        setGpsThreshold(res.data.maxGpsAccuracyMeters || '150');
+        setRequireGps(res.data.requireGps === 'true' || res.data.requireGps === true);
+        if (res.data.timezone) setTimezone(res.data.timezone);
+      }
+      setLoading(false);
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setSaving(true);
+    const res = await apiRequest('/companies/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        maxGpsAccuracyMeters: Number(gpsThreshold),
+        requireGps,
+        timezone,
+      }),
+    });
+    setSaving(false);
+
+    if (res.success) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } else {
+      alert(res.error || 'Error al guardar la configuración');
+    }
   };
+
+  if (loading) {
+    return <div className="p-8 text-center text-xs text-slate-500">Cargando parámetros de configuración...</div>;
+  }
 
   return (
     <div className="space-y-5 max-w-2xl">
       <div>
         <h2 className="text-base font-bold text-slate-100">Configuración de Fichaje de la Empresa</h2>
-        <p className="text-xs text-slate-400">Políticas de geolocalización puntual y control horario</p>
+        <p className="text-xs text-slate-400">Políticas de geolocalización puntual, umbrales de precisión y control horario auditado</p>
       </div>
 
       <form onSubmit={handleSave} className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-4 text-xs">
@@ -965,13 +1062,30 @@ export const SettingsView: React.FC = () => {
           </label>
           <input
             type="number"
+            min="10"
+            max="1000"
             value={gpsThreshold}
             onChange={(e) => setGpsThreshold(e.target.value)}
             className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500"
           />
           <p className="text-[11px] text-slate-500 mt-1">
-            Si un fichaje tiene una precisión superior a este valor (ej. 150m), se marcará como incidencial.
+            Si un fichaje tiene una precisión mayor a este valor (ej. 150m), el servidor registrará una incidencia de advertencia para supervisión.
           </p>
+        </div>
+
+        <div>
+          <label className="block text-slate-300 font-semibold mb-1">
+            Zona Horaria Oficial de la Empresa
+          </label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-emerald-500"
+          >
+            <option value="Europe/Madrid">Europe/Madrid (Península y Baleares - CET/CEST)</option>
+            <option value="Atlantic/Canary">Atlantic/Canary (Islas Canarias - WET/WEST)</option>
+            <option value="UTC">UTC (Universal Coordinated Time)</option>
+          </select>
         </div>
 
         <div className="flex items-center space-x-3 pt-2">
@@ -990,15 +1104,16 @@ export const SettingsView: React.FC = () => {
         <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
           <button
             type="submit"
-            className="flex items-center space-x-2 px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition shadow-lg shadow-emerald-500/10"
+            disabled={saving}
+            className="flex items-center space-x-2 px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl transition shadow-lg shadow-emerald-500/10 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
-            <span>Guardar Configuración</span>
+            <span>{saving ? 'Guardando...' : 'Guardar Configuración'}</span>
           </button>
 
           {saved && (
             <span className="text-emerald-400 text-xs font-semibold flex items-center gap-1">
-              ✓ Parámetros guardados con éxito
+              ✓ Parámetros guardados y auditados con éxito
             </span>
           )}
         </div>
