@@ -55,17 +55,9 @@ export const globalRateLimiter = rateLimit({
 });
 
 /**
- * Rate Limiter Específico para Autenticación (Previene ataques de fuerza bruta)
+ * Cooldown de autenticación eliminado según requerimiento
  */
-export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 15, // 15 intentos por IP
-  skip: () => config.env === 'test' || process.env.NODE_ENV === 'test',
-  message: {
-    success: false,
-    error: 'Too many login attempts. Please wait 15 minutes before trying again.',
-  },
-});
+export const authRateLimiter = (req: Request, res: Response, next: NextFunction) => next();
 
 /**
  * Sanitización de entrada contra ataques de inyección y XSS
